@@ -1,0 +1,782 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white rounded-2xl shadow" style="margin: 16px; padding: 16px 20px;">
+  <h2 class="text-xl font-semibold mb-4">Radar Raporu</h2>
+
+  <style>
+    /* Container ve responsive düzeltmeleri */
+    body {
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    
+    .date-input { 
+      position: relative; 
+      width: 100%;
+    }
+    .date-input input[type="date"]{
+      width: 100%;
+      min-height: 48px;
+      padding: 8px 12px;
+      padding-right: 40px;
+      border: 1px solid #e5e7eb; 
+      border-radius: 8px;
+      background: #fff;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .date-input input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+    .date-input input[type="date"]::-webkit-calendar-picker-indicator{
+      opacity: .75; 
+      cursor: pointer;
+    }
+    
+    .controls { 
+      display: flex; 
+      gap: 12px; 
+      flex-wrap: wrap; 
+      margin-bottom: 1rem; 
+      align-items: center; 
+      width: 100%;
+    }
+    .controls .meta { 
+      margin-left: auto; 
+      color: #4b5563; 
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+    
+    /* Method Details */
+    #methodDetails {
+      background: rgba(3,47,12,0.05) !important;
+      border: 1px solid rgba(3,47,12,0.2) !important;
+      margin-bottom: 16px;
+    }
+
+    /* RESPONSIVE GRID LAYOUT */
+    .main-content-grid {
+      display: grid;
+      gap: 20px;
+      align-items: start;
+      margin: 20px 0;
+      width: 100%;
+      max-width: 100%;
+    }
+    
+    /* Desktop: Radar 3fr, Method 2fr */
+    @media (min-width: 1200px) {
+      .main-content-grid {
+        grid-template-columns: 3fr 2fr;
+        gap: 32px;
+      }
+    }
+    
+    /* Tablet: tek sütun, method üstte */
+    @media (max-width: 1199px) {
+      .main-content-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+      
+      .categories-section {
+        order: 1;
+      }
+      
+      .chart-section {
+        order: 2;
+      }
+    }
+
+    /* Chart section - RESPONSIVE (SOL TARAF - 3FR) */
+    .chart-section {
+      background: #f8fafc;
+      padding: 16px;
+      border-radius: 16px;
+      border: 3px solid #032f0c;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    
+    .chart-wrapper {
+      background: white;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    
+    .chart-title {
+      text-align: center;
+      font-weight: 700;
+      font-size: 18px;
+      color: #032f0c;
+      margin-bottom: 16px;
+    }
+    
+    /* RADAR CANVAS - RESPONSIVE */
+    #radar {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+    }
+    
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 400px;
+      max-width: 100%;
+    }
+
+    /* Categories section - RESPONSIVE (SAĞ TARAF - 2FR) */
+    .categories-section {
+      background: #f9fafb;
+      padding: 20px;
+      border-radius: 16px;
+      border: 2px solid #e5e7eb;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    
+    .categories-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    /* Method cards - RESPONSIVE GRID */
+    .method-cards-vertical {
+      display: grid;
+      gap: 12px;
+      width: 100%;
+    }
+    
+    /* Desktop: tek sütun */
+    @media (min-width: 1200px) {
+      .method-cards-vertical {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    /* Tablet: 2 sütun */
+    @media (min-width: 768px) and (max-width: 1199px) {
+      .method-cards-vertical {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .chart-container {
+        height: 350px;
+      }
+    }
+    
+    /* Mobil: tek sütun */
+    @media (max-width: 767px) {
+      .method-cards-vertical {
+        grid-template-columns: 1fr;
+      }
+      
+      .chart-container {
+        height: 300px;
+      }
+    }
+    
+    .method-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    
+    .method-card:hover {
+      border-color: #032f0c;
+      box-shadow: 0 2px 8px rgba(3,47,12,0.1);
+    }
+    
+    .method-card.method-selected{
+      border: 2px solid #032f0c;
+      box-shadow: 0 2px 10px rgba(3,47,12,0.15);
+      background: rgba(3,47,12,0.05);
+    }
+    
+    .method-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    
+    .method-content {
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .method-name {
+      font-weight: 600;
+      font-size: 15px;
+      color: #1f2937;
+      margin-bottom: 2px;
+    }
+    
+    .method-desc {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.3;
+    }
+    
+    .method-radio {
+      flex-shrink: 0;
+    }
+    
+    .method-radio input[type="radio"] {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* MOBIL RESPONSIVE */
+    @media (max-width: 768px) {
+      body {
+        font-size: 14px;
+      }
+      
+      .controls {
+        flex-direction: column;
+        gap: 8px;
+        align-items: stretch;
+      }
+      
+      .controls .meta {
+        margin-left: 0;
+        text-align: center;
+        margin-top: 8px;
+      }
+      
+      .method-card {
+        flex-direction: row;
+        padding: 12px;
+        gap: 10px;
+      }
+      
+      .method-name {
+        font-size: 14px;
+      }
+      
+      .method-desc {
+        font-size: 12px;
+      }
+      
+      .chart-title {
+        font-size: 16px;
+      }
+      
+      .categories-title {
+        font-size: 16px;
+      }
+      
+      .date-input input[type="date"] {
+        font-size: 13px;
+        padding: 6px 10px;
+        padding-right: 35px;
+        min-height: 42px;
+      }
+      
+      .date-input label {
+        font-size: 13px;
+      }
+    }
+    
+    /* ULTRA KÜÇÜK EKRANLAR */
+    @media (max-width: 480px) {
+      .chart-container {
+        height: 280px;
+      }
+      
+      .method-card {
+        padding: 10px;
+        gap: 8px;
+      }
+      
+      .method-icon {
+        font-size: 18px;
+      }
+      
+      .method-name {
+        font-size: 13px;
+      }
+      
+      .method-desc {
+        font-size: 11px;
+      }
+    }
+    
+    /* Grid sistem düzeltmeleri */
+    .grid {
+      display: grid;
+      width: 100%;
+      max-width: 100%;
+    }
+    
+    .gap-4 {
+      gap: 1rem;
+    }
+    
+    .gap-3 {
+      gap: 0.75rem;
+    }
+    
+    .grid-cols-2 {
+      grid-template-columns: 1fr 1fr;
+    }
+    
+    @media (min-width: 768px) {
+      .md\\:grid-cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    
+    /* Container overflow fix */
+    .container {
+      max-width: 100%;
+      overflow-x: hidden;
+      box-sizing: border-box;
+    }
+    
+    /* Input ve select responsive */
+    select, input[type="date"] {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+
+  <!-- Ana kontroller -->
+  <div class="grid md:grid-cols-2 gap-4 mb-4">
+    <div>
+      <label class="block text-sm font-medium">Temsilci</label>
+      <select id="rep" class="mt-1 w-full border rounded px-3 py-2" style="min-height: 48px;">
+        <option value="" disabled selected>Temsilci seçiniz</option>
+      </select>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="date-input">
+        <label class="block text-sm font-medium text-gray-700">Başlangıç</label>
+        <input id="from" type="date" class="mt-1">
+      </div>
+      <div class="date-input">
+        <label class="block text-sm font-medium text-gray-700">Bitiş</label>
+        <input id="to" type="date" class="mt-1">
+      </div>
+    </div>
+  </div>
+
+  <!-- Üst bilgi/meta -->
+  <div class="controls">
+    <div class="meta" id="meta">Temsilci seçin.</div>
+  </div>
+
+  <!-- Method Details -->
+  <div id="methodDetails" class="hidden mb-4 p-4 bg-blue-50 rounded-xl">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-blue-600 font-semibold" id="methodTitle">Yöntem Bilgisi</span>
+    </div>
+    <div id="methodDescription" class="text-sm text-blue-700"></div>
+    <div id="trendInfo" class="hidden mt-3 p-3 bg-white rounded-lg">
+      <div class="grid md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <strong>İlk Dönem:</strong> <span id="earlyPeriod">-</span><br>
+          <strong>Son Dönem:</strong> <span id="recentPeriod">-</span>
+        </div>
+        <div>
+          <strong>Toplam Gelişim:</strong> <span id="overallImprovement">-</span><br>
+          <strong>En İyi Gelişen:</strong> <span id="bestImproved">-</span>
+        </div>
+      </div>
+    </div>
+    <div id="targetInfo" class="hidden mt-3 p-3 bg-white rounded-lg">
+      <div class="text-sm">
+        <strong>Ortalama Hedef Başarısı:</strong> <span id="avgAchievement">-</span><br>
+        <strong>Hedefe Ulaşan Kategoriler:</strong> <span id="categoriesAtTarget">-</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ana İçerik: Radar SOL (3fr) + Method SAĞ (2fr) -->
+  <div class="main-content-grid">
+    
+    <!-- Chart Section - SOL TARAF (3fr) -->
+    <div class="chart-section">
+      <div class="chart-wrapper">
+        <div class="chart-title" id="chartTitle">Radar Grafiği</div>
+        <div class="chart-container">
+          <canvas id="radar"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Method Selection - SAĞ TARAF (2fr) -->
+    <div class="categories-section">
+      <div class="categories-title">Hesaplama Yöntemi</div>
+      <div class="method-cards-vertical">
+        <div class="method-card" data-method="recent">
+          <div class="method-icon">📈</div>
+          <div class="method-content">
+            <div class="method-name">Mevcut Durum</div>
+            <div class="method-desc">Son 7 anketin ortalaması</div>
+          </div>
+          <div class="method-radio">
+            <input type="radio" name="method" value="recent" id="method-recent" checked>
+          </div>
+        </div>
+        <div class="method-card" data-method="trend">
+          <div class="method-icon">📊</div>
+          <div class="method-content">
+            <div class="method-name">Gelişim Trendi</div>
+            <div class="method-desc">İlk vs son karşılaştırma</div>
+          </div>
+          <div class="method-radio">
+            <input type="radio" name="method" value="trend" id="method-trend">
+          </div>
+        </div>
+        <div class="method-card" data-method="weighted">
+          <div class="method-icon">⚖️</div>
+          <div class="method-content">
+            <div class="method-name">Tarih Ağırlıklı</div>
+            <div class="method-desc">Yeni anketler daha ağır</div>
+          </div>
+          <div class="method-radio">
+            <input type="radio" name="method" value="weighted" id="method-weighted">
+          </div>
+        </div>
+        <div class="method-card" data-method="target">
+          <div class="method-icon">🎯</div>
+          <div class="method-content">
+            <div class="method-name">Hedefe Yakınlık</div>
+            <div class="method-desc">Belirlenen hedeflere göre</div>
+          </div>
+          <div class="method-radio">
+            <input type="radio" name="method" value="target" id="method-target">
+          </div>
+        </div>
+        <div class="method-card" data-method="traditional">
+          <div class="method-icon">📋</div>
+          <div class="method-content">
+            <div class="method-name">Geleneksel</div>
+            <div class="method-desc">Tüm geçmiş anketler</div>
+          </div>
+          <div class="method-radio">
+            <input type="radio" name="method" value="traditional" id="method-traditional">
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const MAP = {{ mgr_to_reps | tojson }};
+const ORDER = {{ radar_order | tojson }};
+const CURRENT_MANAGER = "{{ current_user }}";
+
+const selRep = document.getElementById('rep');
+const inpF   = document.getElementById('from');
+const inpT   = document.getElementById('to');
+const meta   = document.getElementById('meta');
+const methodDetails = document.getElementById('methodDetails');
+const chartTitle = document.getElementById('chartTitle');
+
+const methodCards  = document.querySelectorAll('.method-card');
+const methodRadios = document.querySelectorAll('input[name="method"]');
+
+let chart, currentData = null;
+let isLoading = false;
+let debTimer  = null;
+
+function canLoad(){ return !!selRep.value; }
+function setLoading(state){
+  isLoading = state;
+  meta.textContent = state ? 'Yükleniyor…' : meta.textContent;
+}
+function debounceLoad(){ clearTimeout(debTimer); debTimer = setTimeout(loadData, 250); }
+function selectedMethod(){
+  const r = document.querySelector('input[name="method"]:checked');
+  return r ? r.value : 'recent';
+}
+function getMethodName(method) {
+  const names = { traditional:'Geleneksel', recent:'Mevcut Durum', weighted:'Tarih Ağırlıklı', trend:'Gelişim Trendi', target:'Hedefe Yakınlık' };
+  return names[method] || method;
+}
+function getMethodDescription(method) {
+  const descriptions = {
+    traditional:'Tüm geçmiş anketlerin ağırlıklı ortalaması kullanılır.',
+    recent:'Sadece son 7 anketin ortalaması alınır. Mevcut performansı gösterir.',
+    weighted:'Tüm anketler hesaba katılır, ancak yeni anketler daha ağır sayılır.',
+    trend:'İlk yarı ile son yarı anketler karşılaştırılır. Gelişimi gösterir.',
+    target:'Her kategori için belirlenen hedeflere yakınlık ölçülür.'
+  };
+  return descriptions[method] || '';
+}
+function getMethodColor(method, alpha){
+  const colors = {
+    traditional:`rgba(75,85,99,${alpha})`,
+    recent:`rgba(34,197,94,${alpha})`,
+    weighted:`rgba(59,130,246,${alpha})`,
+    trend:`rgba(168,85,247,${alpha})`,
+    target:`rgba(239,68,68,${alpha})`
+  };
+  return colors[method] || `rgba(34,197,94,${alpha})`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadRepresentatives();
+});
+
+function loadRepresentatives() {
+  if (!CURRENT_MANAGER || !MAP[CURRENT_MANAGER]) {
+    meta.textContent = 'Müdür bilgisi bulunamadı.';
+    return;
+  }
+  
+  const representatives = MAP[CURRENT_MANAGER];
+  selRep.innerHTML = '<option value="" disabled selected>Temsilci seçiniz</option>';
+  
+  representatives.forEach(rep => {
+    const option = document.createElement('option');
+    option.value = rep;
+    option.textContent = rep;
+    selRep.appendChild(option);
+  });
+  
+  if (representatives.length === 0) {
+    meta.textContent = 'Bu müdüre bağlı temsilci bulunamadı.';
+  } else {
+    meta.textContent = 'Temsilci seçin.';
+  }
+}
+
+selRep.addEventListener('change', () => {
+  meta.textContent = 'Temsilci seçildi.';
+  chartTitle.textContent = selRep.value;
+  debounceLoad();
+});
+[inpF, inpT].forEach(el => el.addEventListener('change', debounceLoad));
+
+methodCards.forEach(card => {
+  card.addEventListener('click', () => {
+    const method = card.dataset.method;
+    document.getElementById(`method-${method}`).checked = true;
+    updateMethodSelection(method);
+    if (canLoad()) debounceLoad();
+  });
+});
+methodRadios.forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    updateMethodSelection(e.target.value);
+    if (canLoad()) debounceLoad();
+  });
+});
+
+function updateMethodSelection(method) {
+  methodCards.forEach(card => {
+    card.classList.toggle('method-selected', card.dataset.method === method);
+  });
+  methodDetails.classList.add('hidden');
+  document.getElementById('trendInfo').classList.add('hidden');
+  document.getElementById('targetInfo').classList.add('hidden');
+}
+
+async function loadData(){
+  if (!canLoad() || isLoading) return;
+  const rep    = selRep.value;
+  const f      = inpF.value;
+  const t      = inpT.value;
+  const method = selectedMethod();
+  const params = new URLSearchParams({ rep, method });
+  if (CURRENT_MANAGER) params.set('manager', CURRENT_MANAGER);
+  if (f)   params.set('date_from', f);
+  if (t)   params.set('date_to', t);
+  setLoading(true);
+  meta.textContent = 'Yükleniyor…';
+  try{
+    const res = await fetch('/api/rep-radar?' + params.toString());
+    const js  = await res.json();
+    if (js.error){ meta.textContent = 'Hata: ' + js.error; return; }
+    currentData = js;
+    updateMetaInfo(js);
+    updateMethodDetails(js);
+    updateChart(js, rep, method);
+  }catch(err){
+    console.error('API Error:', err);
+    meta.textContent = 'API hatası: ' + (err?.message || err);
+  }finally{
+    setLoading(false);
+  }
+}
+
+function updateMetaInfo(data) {
+  let metaText = '';
+  if (data.samples){
+    metaText = `Örnek sayısı: ${data.samples}`;
+    if (data.last_eval_at) metaText += ` • Son kayıt: ${data.last_eval_at.replace('T',' ')}`;
+    if (data.method && data.method !== 'traditional'){
+      metaText += ` • Yöntem: ${getMethodName(data.method)}`;
+    }
+  } else {
+    metaText = 'Kayıt bulunamadı';
+  }
+  meta.textContent = metaText;
+}
+
+function updateMethodDetails(data){
+  const method = data.method || 'traditional';
+  document.getElementById('methodTitle').textContent = getMethodName(method);
+  document.getElementById('methodDescription').textContent = getMethodDescription(method);
+  if (method === 'trend' && data.improvement && !data.insufficient_data){
+    document.getElementById('trendInfo').classList.remove('hidden');
+    if (data.early_period){
+      document.getElementById('earlyPeriod').textContent = `${data.early_period.from} - ${data.early_period.to}`;
+    }
+    if (data.recent_period){
+      document.getElementById('recentPeriod').textContent = `${data.recent_period.from} - ${data.recent_period.to}`;
+    }
+    const avgImprovement = data.improvement.reduce((a,b)=>a+b,0) / data.improvement.length;
+    document.getElementById('overallImprovement').textContent = `${avgImprovement.toFixed(1)}%`;
+    const maxImprovementIdx = data.improvement.indexOf(Math.max(...data.improvement));
+    document.getElementById('bestImproved').textContent =
+      `${(data.labels || ORDER)[maxImprovementIdx]} (+${data.improvement[maxImprovementIdx]}%)`;
+  }
+  if (method === 'target' && data.average_achievement){
+    document.getElementById('targetInfo').classList.remove('hidden');
+    document.getElementById('avgAchievement').textContent = `${data.average_achievement}%`;
+    document.getElementById('categoriesAtTarget').textContent =
+      `${data.categories_at_target || 0} / ${(data.labels || ORDER).length}`;
+  }
+  methodDetails.classList.remove('hidden');
+}
+
+function updateChart(data, repName, method){
+  const chartData = {
+    labels: ORDER,
+    datasets: [{
+      label: repName,
+      data: data.data || ORDER.map(()=>0),
+      fill: true,
+      backgroundColor: getMethodColor(method, 0.2),
+      borderColor: getMethodColor(method, 1),
+      pointBackgroundColor: getMethodColor(method, 1),
+      pointBorderColor: '#fff',
+      pointHoverBackgroundColor: '#fff',
+      pointHoverBorderColor: getMethodColor(method, 1),
+      borderWidth: 3,
+      pointRadius: 4,
+      pointHoverRadius: 6
+    }]
+  };
+
+  if (method === 'target' && data.targets){
+    chartData.datasets.push({
+      label: 'Hedefler',
+      data: data.targets,
+      fill: false,
+      backgroundColor: 'rgba(239,68,68,0.1)',
+      borderColor: 'rgba(239,68,68,0.8)',
+      pointBackgroundColor: 'rgba(239,68,68,0.8)',
+      pointBorderColor: '#fff',
+      borderWidth: 2,
+      pointRadius: 3,
+      borderDash: [5,5]
+    });
+  }
+
+  if (method === 'trend' && data.early_scores && !data.insufficient_data){
+    chartData.datasets.push({
+      label: 'İlk Dönem',
+      data: data.early_scores,
+      fill: false,
+      backgroundColor: 'rgba(156,163,175,0.2)',
+      borderColor: 'rgba(156,163,175,0.8)',
+      pointBackgroundColor: 'rgba(156,163,175,0.8)',
+      pointBorderColor: '#fff',
+      borderWidth: 2,
+      pointRadius: 3,
+      borderDash: [3,3]
+    });
+  }
+
+  const config = {
+    type: 'radar',
+    data: chartData,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      elements: { line: { tension: 0.2 }, point: { hoverRadius: 8 } },
+      scales: {
+        r: {
+          angleLines: { display:true, color:'rgba(0,0,0,0.1)' },
+          suggestedMin: 0, 
+          suggestedMax: 100,
+          ticks: { 
+            stepSize: 20, 
+            showLabelBackdrop: false, 
+            font: { size: window.innerWidth < 768 ? 9 : 10 }, 
+            color: '#6B7280' 
+          },
+          pointLabels: { 
+            font: { 
+              size: window.innerWidth < 768 ? 11 : 12, 
+              weight: '600' 
+            }, 
+            color: '#374151' 
+          },
+          grid: { color:'rgba(0,0,0,0.05)' }
+        }
+      },
+      plugins: {
+        legend: {
+          display: true, 
+          position: 'top',
+          labels: { 
+            usePointStyle: true, 
+            padding: window.innerWidth < 768 ? 15 : 20, 
+            font: { size: window.innerWidth < 768 ? 11 : 12 } 
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(ctx){
+              let label = ctx.dataset.label + ': ' + ctx.parsed.r.toFixed(1) + '%';
+              if (method === 'trend' && ctx.datasetIndex === 0 && data.improvement){
+                const imp = data.improvement[ctx.dataIndex];
+                if (imp > 0) label += ` (↗ +${imp}%)`;
+                else if (imp < 0) label += ` (↘ ${imp}%)`;
+              }
+              if (method === 'target' && ctx.datasetIndex === 0 && data.achievement){
+                label += ` (Hedef: ${data.achievement[ctx.dataIndex]}%)`;
+              }
+              return label;
+            }
+          }
+        }
+      }
+    }
+  };
+
+  if (chart) chart.destroy();
+  const ctx = document.getElementById('radar').getContext('2d');
+  chart = new Chart(ctx, config);
+}
+
+updateMethodSelection('recent');
+</script>
+{% endblock %}

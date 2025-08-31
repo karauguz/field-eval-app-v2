@@ -1,0 +1,21 @@
+Kategori,Anket Soruları,DURUM,Skor,örümcek ağı kategori
+Ziyaret Öncesi,Önceki ziyaret notlarını inceler.,Evet,3,"Açılış, Genel"
+Ziyaret Öncesi,"Ziyaret planını segmentasyona göre yapar, uygular ve yöneticisine iletir.",Evet,"4,5",Genel
+Ziyaret Öncesi,"IMS ve satış verilerini analiz eder, rekabeti takip eder.",Evet,6,Sunum
+Ziyaret Öncesi,Segmentasyona uygun SMART hedefler belirler.,Evet,9,Açılış
+Ziyaret Öncesi,Önceki ziyaretindeki notlarını gözden geçirir,Evet,"2,4","İhtiyaç Belirleme, Kapanış"
+Ziyaret Öncesi,Gelebilecek soru ve itirazlara hazırlık yapar.,Evet,"5,1","Genel, Kapanış"
+Ziyaret Esnasında,Ziyaretin sebebini ve önemini açıklar.,Evet,"2,25",Açılış
+Ziyaret Esnasında,Önceki ziyaretle bağlantı kurar.,Evet,"2,25",Kapanış
+Ziyaret Esnasında,"Stok, satış ve ürün görünürlüğünü kontrol eder.",Evet,"4,5",Analiz
+Ziyaret Esnasında,Eczane içi görünürlük fırsatlarını saptar.,Evet,"2,25",İhtiyaç Belirleme
+Ziyaret Esnasında,Segmentine göre MSL uygunluğunu kontrol eder.,Evet,"2,25",Sunum
+Ziyaret Esnasında,Tüm portföy için medikal ve ürün bilgisine hakimdir.,Evet,"6,75",Analiz
+Ziyaret Esnasında,Paydaşlara göre ticari ve medikal detaylandırmayı yapar.,Evet,"4,5","İhtiyaç Belirleme, Genel"
+Ziyaret Esnasında,İhtiyacı ortaya çıkaracak doğru sorular sorar. ,Evet,"4,5",Analiz
+Ziyaret Esnasında,Netleştiği ihtiyaca uygun şirket stratejileri ile paralel aksiyon planı yapar.,Evet,"6,75",Analiz
+Ziyaret Esnasında,"İhtiyaca yönelik ticari teklifi bir satış hikayesi ile yapar, eyleme dayalı kapanış gerçekleştirir.",Evet,"4,5","Analiz, Genel, Kapanış"
+Ziyaret Esnasında,Eğer kontrat Eczanesi ise; kontrat şartlarını kontrol eder ve gerekli aksiyonu alır. Eğer Kontrat Eczanesi değil ise; eczanenin görünürlük imkanları ve satış hacmini göz önünde bulundurarak kontrat süreci başlatır.,Evet,"4,5",Kapanış
+Ziyaret Sonrası,Ziyaret hedefine göre mevcut durumu karşılaştırır.,Evet,"8,35",Analiz
+Ziyaret Sonrası,"Ziyaret sonrası notlarını alır, bir sonraki ziyaret hedefini belirler.",Evet,"8,325",Kapanış
+Ziyaret Sonrası,Eczane ziyaret bilgilerini zamanında Ziyaret sistemine düzenli senkronize eder.,Evet,"8,325",Genel

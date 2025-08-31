@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:24px">
+  <a href="/evaluations" class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px">← Geri</a>
+  <h2 class="h-title" style="margin-bottom:12px">Değerlendirme Detayı</h2>
+
+  <!-- Üst bilgiler -->
+  <div class="grid md:grid-cols-3 gap-4" style="margin-bottom:14px">
+    <div class="stat"><div class="muted">Tarih</div><div class="v">{{ eval.created_at[:19].replace('T',' ') }}</div></div>
+    <div class="stat"><div class="muted">Müdür</div><div class="v">{{ eval.manager_name }}</div></div>
+    <div class="stat"><div class="muted">Çalışan</div><div class="v">{{ eval.rep_name }}</div></div>
+  </div>
+  <div class="grid md:grid-cols-3 gap-4" style="margin-bottom:18px">
+    <div class="stat"><div class="muted">Bölge</div><div class="v">{{ eval.region_name or "-" }}</div></div>
+    <div class="stat"><div class="muted">Brick</div><div class="v">{{ eval.brick_name or "-" }}</div></div>
+    <div class="stat"><div class="muted">Eczane</div><div class="v">{{ eval.pharmacy_name or "-" }}</div></div>
+  </div>
+
+  <!-- KPI kutuları -->
+  <div class="grid md:grid-cols-3 gap-4" style="margin-bottom:8px">
+    <div class="kpi">
+      <div class="muted">Toplam Skor</div>
+      <div><b>{{ '%.2f'|format(eval.total_score) }}</b></div>
+    </div>
+    <div class="kpi">
+      <div class="muted">Maksimum</div>
+      <div><b>{{ '%.2f'|format(eval.max_score) }}</b></div>
+    </div>
+    <div class="kpi">
+      <div class="muted">Yüzde</div>
+      <div><b>{{ '%.0f'|format(eval.percentage) }}%</b></div>
+    </div>
+  </div>
+
+  <!-- Teknik detayı aç/kapat -->
+  <div style="display:flex;justify-content:flex-end;margin:6px 0 14px">
+    <label class="muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input id="toggleTech" type="checkbox"> Teknik detayı göster
+    </label>
+  </div>
+
+  <!-- Cevaplar -->
+  <div class="space-y-3">
+    {% for a in answers %}
+      <div class="ans {{ 'ok' if a.answer==1 else 'no' }}">
+        <div class="ans-row">
+          <div class="q">{{ loop.index }}. {{ a.question_text }}</div>
+          <div class="badge {{ 'ok' if a.answer==1 else 'no' }}">{{ 'Evet' if a.answer==1 else 'Hayır' }}</div>
+        </div>
+        <div class="tech muted">
+          Katsayı: {{ '%.2f'|format(a.weight) }} • Puan: {{ '%.2f'|format(a.score) }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Sayfaya özel küçük stiller -->
+<style>
+.stat{background:#f8fafb;border:1px solid var(--border);border-radius:12px;padding:12px}
+.stat .v{font-weight:700}
+.kpi{background:#ffffff;border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:4px}
+.kpi b{font-size:20px}
+.ans{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
+.ans.ok{border-color:#bbf7d0;background:#f0fdf4}
+.ans.no{border-color:#fecaca;background:#fef2f2}
+.ans-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.q{font-weight:600}
+.badge{padding:6px 12px;border-radius:999px;font-weight:800}
+.badge.ok{background:#16a34a;color:#fff}
+.badge.no{background:#dc2626;color:#fff}
+.tech{display:none;margin-top:6px}
+</style>
+
+<script>
+  // teknik detay toggle
+  document.addEventListener('DOMContentLoaded', () => {
+    const cb = document.getElementById('toggleTech');
+    const blocks = () => Array.from(document.querySelectorAll('.tech'));
+    if (cb) {
+      cb.addEventListener('change', () => {
+        blocks().forEach(el => el.style.display = cb.checked ? 'block' : 'none');
+      });
+    }
+  });
+</script>
+{% endblock %}

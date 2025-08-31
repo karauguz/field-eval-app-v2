@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:24px; position:relative">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h2 class="h-title">Hızlı Gözlem Formu</h2>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <span class="muted">Hoş geldin, <strong>{{ current_user }}</strong></span>
+      
+      <!-- Şifre Değiştir Butonu - sadece şifre sistemi aktifse göster -->
+      {% if has_passwords %}
+        <a href="/change-password?manager={{ current_user|urlencode }}" 
+           class="btn btn-ghost" 
+           style="padding:6px 10px; font-size:12px; border:1px solid #e5e7eb;"
+           title="Şifrenizi değiştirin">
+          🔑 Şifre Değiştir
+        </a>
+      {% endif %}
+      
+      <a href="/logout" class="btn btn-ghost" style="padding:6px 12px;">Çıkış</a>
+    </div>
+  </div>
+
+  <form id="evalForm" method="post" action="/submit" class="space-y-6">
+    <!-- Müdür otomatik seçili, gizli field olarak gönderilir -->
+    <input type="hidden" name="manager_name" value="{{ current_user }}">
+
+    <!-- Üst seçimler - Region otomatik seçili gelecek eğer sadece 1 tane varsa -->
+    <div class="grid md:grid-cols-3 gap-4">
+      <div>
+        <label class="block">Bölge Müdürü</label>
+        <input type="text" value="{{ current_user }}" disabled 
+               style="background: #f8fafc; color: #6b7280; cursor: not-allowed;">
+      </div>
+
+      <div>
+        <label class="block">Bölge</label>
+        {% if regions and regions|length == 1 %}
+          <input type="hidden" name="region_name" value="{{ regions[0] }}">
+          <input type="text" value="{{ regions[0] }}" disabled 
+                 style="background: #f0fdf4; color: #16a34a; cursor: not-allowed;">
+        {% elif regions and regions|length > 1 %}
+          <select id="regionSelect" name="region_name">
+            <option value="" selected>Seçiniz (opsiyonel)</option>
+            {% for r in regions %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+          </select>
+        {% else %}
+          <input type="text" name="region_name" placeholder="(opsiyonel)">
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="block">Temsilci (Çalışan) <span style="color: red;">*</span></label>
+        {% if reps and reps|length > 0 %}
+          <select id="repSelect" name="rep_name" required>
+            <option value="" selected disabled>Seçiniz</option>
+            {% for r in reps %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+          </select>
+        {% else %}
+          <input type="text" name="rep_name" required placeholder="Ad Soyad">
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div>
+        <label class="block">Brick <span style="color: red;">*</span></label>
+        {% if bricks and bricks|length > 0 %}
+          <select id="brickSelect" name="brick_name" required>
+            <option value="" selected disabled>Seçiniz</option>
+            {% for b in bricks %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
+          </select>
+        {% else %}
+          <input type="text" name="brick_name" required placeholder="Brick adı">
+        {% endif %}
+      </div>
+      <div>
+        <label class="block">Eczane <span style="color: red;">*</span></label>
+        {% if pharmacies and pharmacies|length > 0 %}
+          <select id="pharmacySelect" name="pharmacy_name" required>
+            <option value="" selected disabled>Seçiniz</option>
+            {% for e in pharmacies %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+          </select>
+        {% else %}
+          <input type="text" name="pharmacy_name" required placeholder="Eczane adı">
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Sorular -->
+    <div>
+      <div class="section-title">Sorular</div>
+      <p class="muted" style="margin-bottom:10px">Her soruya <b>Evet</b> veya <b>Hayır</b> seçiniz.</p>
+
+      {% set ns = namespace(idx=0) %}
+      {% for group in questions|groupby('category') %}
+        <div class="section-title" style="margin-top:18px">{{ group.grouper or 'Genel' }}</div>
+        <div class="space-y-3">
+          {% for q in group.list %}
+            {% set ns.idx = ns.idx + 1 %}
+            <div class="q-card" data-qid="{{ q.id }}">
+              <div class="q-row">
+                <div class="q-text">{{ ns.idx }}. {{ q.text }}</div>
+                <div class="q-actions">
+                  <div class="seg">
+                    <label class="seg-item">
+                      <input type="radio" name="answer_{{ q.id }}" value="1" required class="answer-radio">
+                      <span>Evet</span>
+                    </label>
+                    <label class="seg-item">
+                      <input type="radio" name="answer_{{ q.id }}" value="0" required class="answer-radio">
+                      <span>Hayır</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div>
+      <label class="block">Not (opsiyonel)</label>
+      <textarea name="notes" rows="3"></textarea>
+    </div>
+
+    <div style="display:flex; gap:12px; align-items:center">
+      <button id="submitBtn" class="btn btn-brand disabled:opacity-50 disabled:cursor-not-allowed">Kayıt Oluştur</button>
+      <a href="/evaluations" class="btn btn-ghost">Kayıtları Gör</a>
+    </div>
+  </form>
+
+  <!-- Sticky alt bar -->
+  <div class="fixed bottom-0 inset-x-0 border" style="padding:12px 16px; background:#ffffffee">
+    <div class="container" style="display:flex; align-items:center; gap:16px; justify-content:space-between; padding:0">
+      <div style="flex:1">
+        <div style="display:flex; justify-content:space-between" class="muted">
+          <span>Cevaplanan Sorular</span>
+          <span id="progressText">0/0</span>
+        </div>
+        <div class="progress"><div id="progressBar"></div></div>
+      </div>
+      <button id="stickySubmit" form="evalForm" class="btn btn-brand disabled:opacity-50 disabled:cursor-not-allowed">Kayıt Oluştur</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- USER-SPECIFIC CASCADE ----
+async function setupCascade(){
+  const res = await fetch('/lookups'); 
+  const data = await res.json();
+  const regSel = document.getElementById('regionSelect');
+  const repSel = document.getElementById('repSelect');
+  const brickSel = document.getElementById('brickSelect');
+  const phSel = document.getElementById('pharmacySelect');
+
+  function resetSelect(sel, placeholder){
+    if(!sel) return;
+    sel.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = ''; opt.textContent = placeholder;
+    opt.selected = true; 
+    opt.disabled = true; // Zorunlu alanlar için disabled
+    sel.appendChild(opt);
+  }
+  function fillSelect(sel, arr){ 
+    if(!sel) return; 
+    arr.forEach(v=>{ 
+      const o=document.createElement('option'); 
+      o.value=v; o.textContent=v; 
+      sel.appendChild(o);
+    });
+  }
+
+  const reg2rep = data.region_to_reps || {};
+  const rep2brick = data.rep_to_bricks || {};
+  const brick2ph = data.brick_to_pharmacies || {};
+
+  // Region değişince temsilci listesi güncellenir
+  if(regSel){
+    regSel.addEventListener('change', () => {
+      const reg = regSel.value;
+      const reps = reg2rep[reg] || data.reps || [];
+
+      resetSelect(repSel,'Seçiniz'); 
+      fillSelect(repSel, reps);
+
+      // Bu temsilcilerin bricklerini topla
+      const brickSet = new Set();
+      reps.forEach(r => (rep2brick[r]||[]).forEach(b=>brickSet.add(b)));
+      resetSelect(brickSel,'Seçiniz'); 
+      fillSelect(brickSel, Array.from(brickSet));
+
+      // Bu bricklerin eczanelerini topla
+      const phSet = new Set();
+      Array.from(brickSet).forEach(b => (brick2ph[b]||[]).forEach(p=>phSet.add(p)));
+      resetSelect(phSel,'Seçiniz'); 
+      fillSelect(phSel, Array.from(phSet));
+    });
+  }
+
+  if(repSel){
+    repSel.addEventListener('change', () => {
+      const bricks = rep2brick[repSel.value] || data.bricks || [];
+      resetSelect(brickSel,'Seçiniz'); 
+      fillSelect(brickSel, bricks);
+
+      const phSet = new Set();
+      bricks.forEach(b => (brick2ph[b]||[]).forEach(p=>phSet.add(p)));
+      resetSelect(phSel,'Seçiniz'); 
+      fillSelect(phSel, Array.from(phSet));
+    });
+  }
+
+  if(brickSel){
+    brickSel.addEventListener('change', () => {
+      const phs = brick2ph[brickSel.value] || data.pharmacies || [];
+      resetSelect(phSel,'Seçiniz'); 
+      fillSelect(phSel, phs);
+    });
+  }
+
+  // YENİ: Eczane seçildiğinde brick'i otomatik doldur
+  if(phSel){
+    phSel.addEventListener('change', () => {
+      const selectedPharmacy = phSel.value;
+      if(!selectedPharmacy || !brickSel) return;
+
+      // Hangi brick'te bu eczane var?
+      for(const [brick, pharmacies] of Object.entries(brick2ph)){
+        if(pharmacies.includes(selectedPharmacy)){
+          brickSel.value = brick;
+          
+          // Visual feedback
+          brickSel.style.borderColor = '#10b981';
+          brickSel.style.backgroundColor = '#f0fdf4';
+          setTimeout(() => {
+            brickSel.style.borderColor = '';
+            brickSel.style.backgroundColor = '';
+          }, 1500);
+          break;
+        }
+      }
+    });
+  }
+}
+
+// ---- PROGRESS ----
+function setupProgress(){
+  const radios = Array.from(document.querySelectorAll('.answer-radio'));
+  const groupNames = [...new Set(radios.map(r => r.name))];
+  const total = groupNames.length;
+
+  const bar = document.getElementById('progressBar');
+  const text = document.getElementById('progressText');
+  const submitBtns = [document.getElementById('submitBtn'), document.getElementById('stickySubmit')];
+
+  const countAnswered = () => groupNames.filter(n => !!document.querySelector(`input[name="${n}"]:checked`)).length;
+
+  function refresh(){
+    const answered = countAnswered();
+    const pct = Math.round((answered/total)*100);
+    bar.style.width = pct + '%';
+    text.textContent = `${answered}/${total}`;
+    const ready = answered === total;
+    submitBtns.forEach(b => { if(b) b.disabled = !ready; });
+  }
+  radios.forEach(r => r.addEventListener('change', refresh));
+  text.textContent = `0/${total}`; refresh();
+}
+
+// ---- FORM VALIDATION ----
+function setupFormValidation(){
+  const form = document.getElementById('evalForm');
+  const requiredSelects = form.querySelectorAll('select[required], input[required]:not([type="radio"])');
+  
+  form.addEventListener('submit', function(e){
+    let hasError = false;
+    
+    // Zorunlu alanları kontrol et
+    requiredSelects.forEach(field => {
+      if(!field.value || field.value === ''){
+        field.style.borderColor = '#ef4444';
+        field.style.backgroundColor = '#fef2f2';
+        hasError = true;
+        
+        // 3 saniye sonra error stilini kaldır
+        setTimeout(() => {
+          field.style.borderColor = '';
+          field.style.backgroundColor = '';
+        }, 3000);
+      }
+    });
+    
+    if(hasError){
+      e.preventDefault();
+      alert('Lütfen tüm zorunlu alanları doldurun!');
+      return false;
+    }
+  });
+  
+  // Input değiştiğinde error stilini kaldır
+  requiredSelects.forEach(field => {
+    field.addEventListener('change', () => {
+      if(field.value){
+        field.style.borderColor = '';
+        field.style.backgroundColor = '';
+      }
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  (async ()=>{ 
+    try{ 
+      await setupCascade(); 
+      setupFormValidation();
+    } 
+    catch(e){ 
+      console.error('Setup error:', e);
+    } 
+    finally{ 
+      setupProgress(); 
+    } 
+  })();
+});
+</script>
+{% endblock %}
