@@ -1,485 +1,486 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="bg-white rounded-2xl shadow" style="margin: 16px; padding: 16px 20px;">
-  <h2 class="text-xl font-semibold mb-4">Radar Raporu</h2>
+<div class="container mx-auto px-4 py-6">
+  <div class="bg-white rounded-2xl shadow" style="padding: 16px 20px;">
+    <h2 class="text-xl font-semibold mb-4">Radar Raporu</h2>
 
-  <style>
-    /* Container ve responsive düzeltmeleri */
-    body {
-      margin: 0;
-      padding: 0;
-      overflow-x: hidden;
-    }
-    
-    .date-input { 
-      position: relative; 
-      width: 100%;
-    }
-    .date-input input[type="date"]{
-      width: 100%;
-      min-height: 48px;
-      padding: 8px 12px;
-      padding-right: 40px;
-      border: 1px solid #e5e7eb; 
-      border-radius: 8px;
-      background: #fff;
-      font-size: 14px;
-      box-sizing: border-box;
-    }
-    .date-input input[type="date"]::-webkit-date-and-time-value { text-align: left; }
-    .date-input input[type="date"]::-webkit-calendar-picker-indicator{
-      opacity: .75; 
-      cursor: pointer;
-    }
-    
-    .controls { 
-      display: flex; 
-      gap: 12px; 
-      flex-wrap: wrap; 
-      margin-bottom: 1rem; 
-      align-items: center; 
-      width: 100%;
-    }
-    .controls .meta { 
-      margin-left: auto; 
-      color: #4b5563; 
-      font-size: 0.9rem;
-      flex-shrink: 0;
-    }
-    
-    /* Method Details */
-    #methodDetails {
-      background: rgba(3,47,12,0.05) !important;
-      border: 1px solid rgba(3,47,12,0.2) !important;
-      margin-bottom: 16px;
-    }
-
-    /* RESPONSIVE GRID LAYOUT */
-    .main-content-grid {
-      display: grid;
-      gap: 20px;
-      align-items: start;
-      margin: 20px 0;
-      width: 100%;
-      max-width: 100%;
-    }
-    
-    /* Desktop: Radar 3fr, Method 2fr */
-    @media (min-width: 1200px) {
-      .main-content-grid {
-        grid-template-columns: 3fr 2fr;
-        gap: 32px;
-      }
-    }
-    
-    /* Tablet: tek sütun, method üstte */
-    @media (max-width: 1199px) {
-      .main-content-grid {
-        grid-template-columns: 1fr;
-        gap: 20px;
-      }
-      
-      .categories-section {
-        order: 1;
-      }
-      
-      .chart-section {
-        order: 2;
-      }
-    }
-
-    /* Chart section - RESPONSIVE (SOL TARAF - 3FR) */
-    .chart-section {
-      background: #f8fafc;
-      padding: 16px;
-      border-radius: 16px;
-      border: 3px solid #032f0c;
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    
-    .chart-wrapper {
-      background: white;
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    
-    .chart-title {
-      text-align: center;
-      font-weight: 700;
-      font-size: 18px;
-      color: #032f0c;
-      margin-bottom: 16px;
-    }
-    
-    /* RADAR CANVAS - RESPONSIVE */
-    #radar {
-      width: 100% !important;
-      max-width: 100% !important;
-      height: auto !important;
-    }
-    
-    .chart-container {
-      position: relative;
-      width: 100%;
-      height: 400px;
-      max-width: 100%;
-    }
-
-    /* Categories section - RESPONSIVE (SAĞ TARAF - 2FR) */
-    .categories-section {
-      background: #f9fafb;
-      padding: 20px;
-      border-radius: 16px;
-      border: 2px solid #e5e7eb;
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    
-    .categories-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #1f2937;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-
-    /* Method cards - RESPONSIVE GRID */
-    .method-cards-vertical {
-      display: grid;
-      gap: 12px;
-      width: 100%;
-    }
-    
-    /* Desktop: tek sütun */
-    @media (min-width: 1200px) {
-      .method-cards-vertical {
-        grid-template-columns: 1fr;
-      }
-    }
-    
-    /* Tablet: 2 sütun */
-    @media (min-width: 768px) and (max-width: 1199px) {
-      .method-cards-vertical {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      
-      .chart-container {
-        height: 350px;
-      }
-    }
-    
-    /* Mobil: tek sütun */
-    @media (max-width: 767px) {
-      .method-cards-vertical {
-        grid-template-columns: 1fr;
-      }
-      
-      .chart-container {
-        height: 300px;
-      }
-    }
-    
-    .method-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background: white;
-      border: 2px solid #e5e7eb;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.2s;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    
-    .method-card:hover {
-      border-color: #032f0c;
-      box-shadow: 0 2px 8px rgba(3,47,12,0.1);
-    }
-    
-    .method-card.method-selected{
-      border: 2px solid #032f0c;
-      box-shadow: 0 2px 10px rgba(3,47,12,0.15);
-      background: rgba(3,47,12,0.05);
-    }
-    
-    .method-icon {
-      font-size: 20px;
-      flex-shrink: 0;
-    }
-    
-    .method-content {
-      flex: 1;
-      min-width: 0;
-    }
-    
-    .method-name {
-      font-weight: 600;
-      font-size: 15px;
-      color: #1f2937;
-      margin-bottom: 2px;
-    }
-    
-    .method-desc {
-      font-size: 13px;
-      color: #6b7280;
-      line-height: 1.3;
-    }
-    
-    .method-radio {
-      flex-shrink: 0;
-    }
-    
-    .method-radio input[type="radio"] {
-      width: 16px;
-      height: 16px;
-    }
-
-    /* MOBIL RESPONSIVE */
-    @media (max-width: 768px) {
+    <style>
+      /* Container ve responsive düzeltmeleri */
       body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+      }
+      
+      .container {
+        max-width: 1200px;
+        width: 100%;
+        margin: 0 auto;
+      }
+      
+      .date-input { 
+        position: relative; 
+        width: 100%;
+      }
+      .date-input input[type="date"]{
+        width: 100%;
+        min-height: 48px;
+        padding: 8px 12px;
+        padding-right: 40px;
+        border: 1px solid #e5e7eb; 
+        border-radius: 8px;
+        background: #fff;
         font-size: 14px;
+        box-sizing: border-box;
+      }
+      .date-input input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+      .date-input input[type="date"]::-webkit-calendar-picker-indicator{
+        opacity: .75; 
+        cursor: pointer;
       }
       
-      .controls {
-        flex-direction: column;
-        gap: 8px;
-        align-items: stretch;
+      .controls { 
+        display: flex; 
+        gap: 12px; 
+        flex-wrap: wrap; 
+        margin-bottom: 1rem; 
+        align-items: center; 
+        width: 100%;
+      }
+      .controls .meta { 
+        margin-left: auto; 
+        color: #4b5563; 
+        font-size: 0.9rem;
+        flex-shrink: 0;
       }
       
-      .controls .meta {
-        margin-left: 0;
-        text-align: center;
-        margin-top: 8px;
+      /* Method Details */
+      #methodDetails {
+        background: rgba(3,47,12,0.05) !important;
+        border: 1px solid rgba(3,47,12,0.2) !important;
+        margin-bottom: 16px;
+      }
+
+      /* RESPONSIVE GRID LAYOUT */
+      .main-content-grid {
+        display: grid;
+        gap: 20px;
+        align-items: start;
+        margin: 20px 0;
+        width: 100%;
+        max-width: 100%;
       }
       
-      .method-card {
-        flex-direction: row;
+      /* Desktop: Radar 3fr, Method 2fr */
+      @media (min-width: 1200px) {
+        .main-content-grid {
+          grid-template-columns: 3fr 2fr;
+          gap: 32px;
+        }
+      }
+      
+      /* Tablet: tek sütun, method üstte */
+      @media (max-width: 1199px) {
+        .main-content-grid {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        
+        .categories-section {
+          order: 1;
+        }
+        
+        .chart-section {
+          order: 2;
+        }
+      }
+
+      /* Chart section - RESPONSIVE (SOL TARAF - 3FR) */
+      .chart-section {
+        background: #f8fafc;
+        padding: 16px;
+        border-radius: 16px;
+        border: 3px solid #032f0c;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      
+      .chart-wrapper {
+        background: white;
+        border-radius: 12px;
         padding: 12px;
-        gap: 10px;
-      }
-      
-      .method-name {
-        font-size: 14px;
-      }
-      
-      .method-desc {
-        font-size: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       
       .chart-title {
-        font-size: 16px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 18px;
+        color: #032f0c;
+        margin-bottom: 16px;
+      }
+      
+      /* RADAR CANVAS - RESPONSIVE */
+      #radar {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+      }
+      
+      .chart-container {
+        position: relative;
+        width: 100%;
+        height: 400px;
+        max-width: 100%;
+      }
+
+      /* Categories section - RESPONSIVE (SAĞ TARAF - 2FR) */
+      .categories-section {
+        background: #f9fafb;
+        padding: 20px;
+        border-radius: 16px;
+        border: 2px solid #e5e7eb;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       
       .categories-title {
-        font-size: 16px;
+        font-size: 18px;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+
+      /* Method cards - RESPONSIVE GRID */
+      .method-cards-vertical {
+        display: grid;
+        gap: 12px;
+        width: 100%;
       }
       
-      .date-input input[type="date"] {
-        font-size: 13px;
-        padding: 6px 10px;
-        padding-right: 35px;
-        min-height: 42px;
+      /* Desktop: tek sütun */
+      @media (min-width: 1200px) {
+        .method-cards-vertical {
+          grid-template-columns: 1fr;
+        }
       }
       
-      .date-input label {
-        font-size: 13px;
+      /* Tablet: 2 sütun */
+      @media (min-width: 768px) and (max-width: 1199px) {
+        .method-cards-vertical {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .chart-container {
+          height: 350px;
+        }
       }
-    }
-    
-    /* ULTRA KÜÇÜK EKRANLAR */
-    @media (max-width: 480px) {
-      .chart-container {
-        height: 280px;
+      
+      /* Mobil: tek sütun */
+      @media (max-width: 767px) {
+        .method-cards-vertical {
+          grid-template-columns: 1fr;
+        }
+        
+        .chart-container {
+          height: 300px;
+        }
       }
       
       .method-card {
-        padding: 10px;
-        gap: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      
+      .method-card:hover {
+        border-color: #032f0c;
+        box-shadow: 0 2px 8px rgba(3,47,12,0.1);
+      }
+      
+      .method-card.method-selected{
+        border: 2px solid #032f0c;
+        box-shadow: 0 2px 10px rgba(3,47,12,0.15);
+        background: rgba(3,47,12,0.05);
       }
       
       .method-icon {
-        font-size: 18px;
+        font-size: 20px;
+        flex-shrink: 0;
+      }
+      
+      .method-content {
+        flex: 1;
+        min-width: 0;
       }
       
       .method-name {
-        font-size: 13px;
+        font-weight: 600;
+        font-size: 15px;
+        color: #1f2937;
+        margin-bottom: 2px;
       }
       
       .method-desc {
-        font-size: 11px;
+        font-size: 13px;
+        color: #6b7280;
+        line-height: 1.3;
       }
-    }
-    
-    /* Grid sistem düzeltmeleri */
-    .grid {
-      display: grid;
-      width: 100%;
-      max-width: 100%;
-    }
-    
-    .gap-4 {
-      gap: 1rem;
-    }
-    
-    .gap-3 {
-      gap: 0.75rem;
-    }
-    
-    .grid-cols-2 {
-      grid-template-columns: 1fr 1fr;
-    }
-    
-    @media (min-width: 768px) {
-      .md\\:grid-cols-2 {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      
+      .method-radio {
+        flex-shrink: 0;
       }
-    }
-    
-    /* Container overflow fix */
-    .container {
-      max-width: 100%;
-      overflow-x: hidden;
-      box-sizing: border-box;
-    }
-    
-    /* Input ve select responsive */
-    select, input[type="date"] {
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-  </style>
+      
+      .method-radio input[type="radio"] {
+        width: 16px;
+        height: 16px;
+      }
 
-  <!-- Ana kontroller -->
-  <div class="grid md:grid-cols-2 gap-4 mb-4">
-    <div>
-      <label class="block text-sm font-medium">Temsilci</label>
-      <select id="rep" class="mt-1 w-full border rounded px-3 py-2" style="min-height: 48px;">
-        <option value="" disabled selected>Temsilci seçiniz</option>
-      </select>
-    </div>
-    <div class="grid grid-cols-2 gap-3">
-      <div class="date-input">
-        <label class="block text-sm font-medium text-gray-700">Başlangıç</label>
-        <input id="from" type="date" class="mt-1">
-      </div>
-      <div class="date-input">
-        <label class="block text-sm font-medium text-gray-700">Bitiş</label>
-        <input id="to" type="date" class="mt-1">
-      </div>
-    </div>
-  </div>
+      /* MOBİL RESPONSIVE */
+      @media (max-width: 768px) {
+        body {
+          font-size: 14px;
+        }
+        
+        .controls {
+          flex-direction: column;
+          gap: 8px;
+          align-items: stretch;
+        }
+        
+        .controls .meta {
+          margin-left: 0;
+          text-align: center;
+          margin-top: 8px;
+        }
+        
+        .method-card {
+          flex-direction: row;
+          padding: 12px;
+          gap: 10px;
+        }
+        
+        .method-name {
+          font-size: 14px;
+        }
+        
+        .method-desc {
+          font-size: 12px;
+        }
+        
+        .chart-title {
+          font-size: 16px;
+        }
+        
+        .categories-title {
+          font-size: 16px;
+        }
+        
+        .date-input input[type="date"] {
+          font-size: 13px;
+          padding: 6px 10px;
+          padding-right: 35px;
+          min-height: 42px;
+        }
+        
+        .date-input label {
+          font-size: 13px;
+        }
+      }
+      
+      /* ULTRA KÜÇÜK EKRANLAR */
+      @media (max-width: 480px) {
+        .chart-container {
+          height: 280px;
+        }
+        
+        .method-card {
+          padding: 10px;
+          gap: 8px;
+        }
+        
+        .method-icon {
+          font-size: 18px;
+        }
+        
+        .method-name {
+          font-size: 13px;
+        }
+        
+        .method-desc {
+          font-size: 11px;
+        }
+      }
+      
+      /* Grid sistem düzeltmeleri */
+      .grid {
+        display: grid;
+        width: 100%;
+        max-width: 100%;
+      }
+      
+      .gap-4 {
+        gap: 1rem;
+      }
+      
+      .gap-3 {
+        gap: 0.75rem;
+      }
+      
+      .grid-cols-2 {
+        grid-template-columns: 1fr 1fr;
+      }
+      
+      @media (min-width: 768px) {
+        .md\\:grid-cols-2 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      
+      /* Input ve select responsive */
+      select, input[type="date"] {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+    </style>
 
-  <!-- Üst bilgi/meta -->
-  <div class="controls">
-    <div class="meta" id="meta">Temsilci seçin.</div>
-  </div>
-
-  <!-- Method Details -->
-  <div id="methodDetails" class="hidden mb-4 p-4 bg-blue-50 rounded-xl">
-    <div class="flex items-center gap-2 mb-2">
-      <span class="text-blue-600 font-semibold" id="methodTitle">Yöntem Bilgisi</span>
-    </div>
-    <div id="methodDescription" class="text-sm text-blue-700"></div>
-    <div id="trendInfo" class="hidden mt-3 p-3 bg-white rounded-lg">
-      <div class="grid md:grid-cols-2 gap-4 text-sm">
-        <div>
-          <strong>İlk Dönem:</strong> <span id="earlyPeriod">-</span><br>
-          <strong>Son Dönem:</strong> <span id="recentPeriod">-</span>
-        </div>
-        <div>
-          <strong>Toplam Gelişim:</strong> <span id="overallImprovement">-</span><br>
-          <strong>En İyi Gelişen:</strong> <span id="bestImproved">-</span>
-        </div>
+    <!-- Ana kontroller -->
+    <div class="grid md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-medium">Temsilci</label>
+        <select id="rep" class="mt-1 w-full border rounded px-3 py-2" style="min-height: 48px;">
+          <option value="" disabled selected>Temsilci seçiniz</option>
+        </select>
       </div>
-    </div>
-    <div id="targetInfo" class="hidden mt-3 p-3 bg-white rounded-lg">
-      <div class="text-sm">
-        <strong>Ortalama Hedef Başarısı:</strong> <span id="avgAchievement">-</span><br>
-        <strong>Hedefe Ulaşan Kategoriler:</strong> <span id="categoriesAtTarget">-</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Ana İçerik: Radar SOL (3fr) + Method SAĞ (2fr) -->
-  <div class="main-content-grid">
-    
-    <!-- Chart Section - SOL TARAF (3fr) -->
-    <div class="chart-section">
-      <div class="chart-wrapper">
-        <div class="chart-title" id="chartTitle">Radar Grafiği</div>
-        <div class="chart-container">
-          <canvas id="radar"></canvas>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="date-input">
+          <label class="block text-sm font-medium text-gray-700">Başlangıç</label>
+          <input id="from" type="date" class="mt-1">
+        </div>
+        <div class="date-input">
+          <label class="block text-sm font-medium text-gray-700">Bitiş</label>
+          <input id="to" type="date" class="mt-1">
         </div>
       </div>
     </div>
 
-    <!-- Method Selection - SAĞ TARAF (2fr) -->
-    <div class="categories-section">
-      <div class="categories-title">Hesaplama Yöntemi</div>
-      <div class="method-cards-vertical">
-        <div class="method-card" data-method="recent">
-          <div class="method-icon">📈</div>
-          <div class="method-content">
-            <div class="method-name">Mevcut Durum</div>
-            <div class="method-desc">Son 7 anketin ortalaması</div>
+    <!-- Üst bilgi/meta -->
+    <div class="controls">
+      <div class="meta" id="meta">Temsilci seçin.</div>
+    </div>
+
+    <!-- Method Details -->
+    <div id="methodDetails" class="hidden mb-4 p-4 bg-blue-50 rounded-xl">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-blue-600 font-semibold" id="methodTitle">Yöntem Bilgisi</span>
+      </div>
+      <div id="methodDescription" class="text-sm text-blue-700"></div>
+      <div id="trendInfo" class="hidden mt-3 p-3 bg-white rounded-lg">
+        <div class="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <strong>İlk Dönem:</strong> <span id="earlyPeriod">-</span><br>
+            <strong>Son Dönem:</strong> <span id="recentPeriod">-</span>
           </div>
-          <div class="method-radio">
-            <input type="radio" name="method" value="recent" id="method-recent" checked>
-          </div>
-        </div>
-        <div class="method-card" data-method="trend">
-          <div class="method-icon">📊</div>
-          <div class="method-content">
-            <div class="method-name">Gelişim Trendi</div>
-            <div class="method-desc">İlk vs son karşılaştırma</div>
-          </div>
-          <div class="method-radio">
-            <input type="radio" name="method" value="trend" id="method-trend">
-          </div>
-        </div>
-        <div class="method-card" data-method="weighted">
-          <div class="method-icon">⚖️</div>
-          <div class="method-content">
-            <div class="method-name">Tarih Ağırlıklı</div>
-            <div class="method-desc">Yeni anketler daha ağır</div>
-          </div>
-          <div class="method-radio">
-            <input type="radio" name="method" value="weighted" id="method-weighted">
-          </div>
-        </div>
-        <div class="method-card" data-method="target">
-          <div class="method-icon">🎯</div>
-          <div class="method-content">
-            <div class="method-name">Hedefe Yakınlık</div>
-            <div class="method-desc">Belirlenen hedeflere göre</div>
-          </div>
-          <div class="method-radio">
-            <input type="radio" name="method" value="target" id="method-target">
-          </div>
-        </div>
-        <div class="method-card" data-method="traditional">
-          <div class="method-icon">📋</div>
-          <div class="method-content">
-            <div class="method-name">Geleneksel</div>
-            <div class="method-desc">Tüm geçmiş anketler</div>
-          </div>
-          <div class="method-radio">
-            <input type="radio" name="method" value="traditional" id="method-traditional">
+          <div>
+            <strong>Toplam Gelişim:</strong> <span id="overallImprovement">-</span><br>
+            <strong>En İyi Gelişen:</strong> <span id="bestImproved">-</span>
           </div>
         </div>
       </div>
+      <div id="targetInfo" class="hidden mt-3 p-3 bg-white rounded-lg">
+        <div class="text-sm">
+          <strong>Ortalama Hedef Başarısı:</strong> <span id="avgAchievement">-</span><br>
+          <strong>Hedefe Ulaşan Kategoriler:</strong> <span id="categoriesAtTarget">-</span>
+        </div>
+      </div>
     </div>
-    
+
+    <!-- Ana İçerik: Radar SOL (3fr) + Method SAĞ (2fr) -->
+    <div class="main-content-grid">
+      
+      <!-- Chart Section - SOL TARAF (3fr) -->
+      <div class="chart-section">
+        <div class="chart-wrapper">
+          <div class="chart-title" id="chartTitle">Radar Grafiği</div>
+          <div class="chart-container">
+            <canvas id="radar"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Method Selection - SAĞ TARAF (2fr) -->
+      <div class="categories-section">
+        <div class="categories-title">Hesaplama Yöntemi</div>
+        <div class="method-cards-vertical">
+          <div class="method-card" data-method="recent">
+            <div class="method-icon">📈</div>
+            <div class="method-content">
+              <div class="method-name">Mevcut Durum</div>
+              <div class="method-desc">Son 7 anketin ortalaması</div>
+            </div>
+            <div class="method-radio">
+              <input type="radio" name="method" value="recent" id="method-recent" checked>
+            </div>
+          </div>
+          <div class="method-card" data-method="trend">
+            <div class="method-icon">📊</div>
+            <div class="method-content">
+              <div class="method-name">Gelişim Trendi</div>
+              <div class="method-desc">İlk vs son karşılaştırma</div>
+            </div>
+            <div class="method-radio">
+              <input type="radio" name="method" value="trend" id="method-trend">
+            </div>
+          </div>
+          <div class="method-card" data-method="weighted">
+            <div class="method-icon">⚖️</div>
+            <div class="method-content">
+              <div class="method-name">Tarih Ağırlıklı</div>
+              <div class="method-desc">Yeni anketler daha ağır</div>
+            </div>
+            <div class="method-radio">
+              <input type="radio" name="method" value="weighted" id="method-weighted">
+            </div>
+          </div>
+          <div class="method-card" data-method="target">
+            <div class="method-icon">🎯</div>
+            <div class="method-content">
+              <div class="method-name">Hedefe Yakınlık</div>
+              <div class="method-desc">Belirlenen hedeflere göre</div>
+            </div>
+            <div class="method-radio">
+              <input type="radio" name="method" value="target" id="method-target">
+            </div>
+          </div>
+          <div class="method-card" data-method="traditional">
+            <div class="method-icon">📋</div>
+            <div class="method-content">
+              <div class="method-name">Geleneksel</div>
+              <div class="method-desc">Tüm geçmiş anketler</div>
+            </div>
+            <div class="method-radio">
+              <input type="radio" name="method" value="traditional" id="method-traditional">
+            </div>
+          </div>
+        </div>
+      </div>
+      
+    </div>
   </div>
 </div>
 
