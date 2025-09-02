@@ -1485,7 +1485,7 @@ async def login_submit(request: Request,
         try:
             if auth_manager.authenticate_manager(manager_name, password):
                 print(f"LOGIN SUCCESS: {manager_name}")
-                response = RedirectResponse(url="/", status_code=303)
+                response = RedirectResponse(url="/dashboard", status_code=303)
                 encoded_name = urllib.parse.quote(manager_name, safe='')
                 response.set_cookie("session_user", encoded_name, 
                                   httponly=True, max_age=3600*8, 
