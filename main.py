@@ -1,4 +1,4 @@
-# main.py - Tam çalışır auth + radar sistemi
+# main.py - Eczane/Doktor anket sistemi
 from collections import defaultdict
 from datetime import datetime, timedelta, date
 from typing import Optional, Dict, Set, List, Tuple
@@ -40,8 +40,24 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 app = FastAPI(title="Saha Gözlem Formu")
 app.mount("/static", StaticFiles(directory=str((BASE_DIR / "static").as_posix())), name="static")
 
-# --------------------------- Radar Kategorileri ---------------------------
-CATS_ORDER: List[str] = ["Açılış", "İhtiyaç Belirleme", "Analiz", "Sunum", "Kapanış", "Genel"]
+# --------------------------- Anket Türü ve Kategoriler ---------------------------
+SURVEY_TYPES = {
+    "eczane": {
+        "name": "Eczane Ziyareti",
+        "categories": ["Müşteri Odaklılık", "Öğrenme Çevikliği", "Sonuç Çevikliği"],
+        "requires_doctor_name": False,
+        "segment_field": "pharmacy_name"
+    },
+    "doktor": {
+        "name": "Doktor Ziyareti", 
+        "categories": ["Müşteri Odaklılık", "Öğrenme Çevikliği", "Sonuç Çevikliği", "Kişisel Farkındalık", "Değişim Çevikliği"],
+        "requires_doctor_name": True,
+        "segment_field": "doctor_name"
+    }
+}
+
+# CSV'den gelen kategoriler (backward compatibility için)
+CATS_ORDER: List[str] = ["Müşteri Odaklılık", "Öğrenme Çevikliği", "Sonuç Çevikliği", "Kişisel Farkındalık", "Değişim Çevikliği", "Genel"]
 CATS_SET = {c.lower() for c in CATS_ORDER}
 
 def _norm(s: Optional[str]) -> str:
@@ -52,32 +68,39 @@ def _norm(s: Optional[str]) -> str:
     s = unicodedata.normalize("NFKD", s)
     return "".join(ch for ch in s if not unicodedata.combining(ch))
 
-def canon_cat(label: str) -> str:
+def get_survey_categories(survey_type: str) -> List[str]:
+    """Anket türüne göre kategori listesi döndür"""
+    return SURVEY_TYPES.get(survey_type, {}).get("categories", CATS_ORDER)
+
+def canon_cat(label: str, survey_type: str = None) -> str:
+    """Kategori eşleştirme - CSV'den gelen kategorilere göre"""
     key = _norm(label)
     
-    # Açılış kategorisi
-    if key in {"acilis", "açılış", "hazirlik", "ziyaret oncesi", "ziyaret öncesi"}: 
-        return "Açılış"
-    
-    # İhtiyaç Belirleme kategorisi
-    if key in {"ihtiyac belirleme", "ihtiyaç belirleme", "ihtiyac", "ihtiyac-belirleme"}:
-        return "İhtiyaç Belirleme"
-    
-    # Analiz kategorisi
-    if key in {"analiz", "analysis", "analys", "veri analiz"}:
-        return "Analiz"
-    
-    # Sunum kategorisi
-    if key in {"sunum", "presentation", "mesaj"}:
-        return "Sunum"
-    
-    # Kapanış kategorisi  
-    if key in {"kapanis", "kapanış", "closing"}:
-        return "Kapanış"
-    
-    # Genel kategorisi
-    if key in {"genel", "general"}:
+    # Ana kategoriler (CSV'den gelenler)
+    if key in {"musteri odaklilik", "müşteri odaklılık", "customer focus"}:
+        return "Müşteri Odaklılık"
+    elif key in {"ogrenme cevikligi", "öğrenme çevikliği", "learning agility"}:
+        return "Öğrenme Çevikliği"
+    elif key in {"sonuc cevikligi", "sonuç çevikliği", "result agility"}:
+        return "Sonuç Çevikliği"
+    elif key in {"kisisel farkindalik", "kişisel farkındalık", "personal awareness"}:
+        return "Kişisel Farkındalık"
+    elif key in {"degisim cevikligi", "değişim çevikliği", "change agility"}:
+        return "Değişim Çevikliği"
+    elif key in {"genel", "general"}:
         return "Genel"
+    
+    # Eski sistem için backward compatibility
+    elif key in {"acilis", "açılış", "hazirlik", "ziyaret oncesi", "ziyaret öncesi"}: 
+        return "Müşteri Odaklılık"  # Açılış -> Müşteri Odaklılık
+    elif key in {"ihtiyac belirleme", "ihtiyaç belirleme", "ihtiyac", "ihtiyac-belirleme"}:
+        return "Öğrenme Çevikliği"  # İhtiyaç Belirleme -> Öğrenme Çevikliği
+    elif key in {"analiz", "analysis", "analys", "veri analiz"}:
+        return "Öğrenme Çevikliği"  # Analiz -> Öğrenme Çevikliği
+    elif key in {"sunum", "presentation", "mesaj"}:
+        return "Sonuç Çevikliği"  # Sunum -> Sonuç Çevikliği
+    elif key in {"kapanis", "kapanış", "closing"}:
+        return "Sonuç Çevikliği"  # Kapanış -> Sonuç Çevikliği
     
     # Doğrudan tam eşleşme dene
     for c in CATS_ORDER:
@@ -87,41 +110,26 @@ def canon_cat(label: str) -> str:
     print(f"Bilinmeyen kategori: '{label}' -> '{key}' -> Genel'e atandı")
     return "Genel"
 
-def parse_category_tags(raw: Optional[str]) -> List[Tuple[str, float]]:
+def parse_category_tags(raw: Optional[str], survey_type: str = None) -> List[Tuple[str, float]]:
+    """Kategori tag'lerini parse et - virgül ile ayrılan kategoriler"""
     if not raw or str(raw).strip() == "":
         return [("Genel", 1.0)]
 
-    parts = [p.strip() for p in str(raw).replace(";", ",").split(",") if p.strip()]
-    parsed: List[Tuple[str, Optional[float]]] = []
-    total_ratio = 0.0
-    has_ratio = False
-
+    # Virgül ile ayrılmış kategorileri işle
+    parts = [p.strip() for p in str(raw).split(",") if p.strip()]
+    
+    if len(parts) == 1:
+        # Tek kategori
+        return [(canon_cat(parts[0], survey_type), 1.0)]
+    
+    # Çoklu kategori - eşit ağırlık
+    share = 1.0 / len(parts)
+    result = []
     for p in parts:
-        if ":" in p:
-            name, ratio = p.split(":", 1)
-            try:
-                r = float(str(ratio).replace(",", "."))
-                has_ratio = True
-                parsed.append((canon_cat(name), max(r, 0.0)))
-                total_ratio += max(r, 0.0)
-            except:
-                parsed.append((canon_cat(name), None))
-        else:
-            parsed.append((canon_cat(p), None))
-
-    agg: Dict[str, Optional[float]] = {}
-    for name, r in parsed:
-        if has_ratio:
-            agg[name] = float(agg.get(name, 0.0) or 0.0) + (r or 0.0)
-        else:
-            agg[name] = None
-
-    if has_ratio and total_ratio > 0:
-        return [(k, float(v)/total_ratio) for k, v in agg.items() if float(v) > 0]
-    else:
-        n = max(len(agg), 1)
-        share = 1.0 / n
-        return [(k, share) for k in agg.keys()]
+        cat = canon_cat(p.strip(), survey_type)
+        result.append((cat, share))
+    
+    return result
 
 def sql_date_cast(col_expr: str) -> str:
     backend = engine.url.get_backend_name()
@@ -140,7 +148,8 @@ def init_db():
             id {pk},
             text TEXT NOT NULL,
             weight REAL NOT NULL DEFAULT 1.0,
-            category TEXT
+            category TEXT,
+            survey_type TEXT DEFAULT 'eczane'
         );"""))
         conn.execute(text(f"""
         CREATE TABLE IF NOT EXISTS evaluations (
@@ -151,6 +160,8 @@ def init_db():
             region_name TEXT,
             brick_name TEXT,
             pharmacy_name TEXT,
+            doctor_name TEXT,
+            survey_type TEXT DEFAULT 'eczane',
             total_score REAL NOT NULL,
             max_score REAL NOT NULL,
             percentage REAL NOT NULL,
@@ -168,17 +179,26 @@ def init_db():
         );"""))
 
 def migrate_db():
+    """Veritabanını yeni sütunlarla güncelle"""
     backend = engine.url.get_backend_name()
     if backend == "sqlite":
         with engine.begin() as conn:
+            # Evaluations tablosu için yeni sütunlar
             cols = [r[1] for r in conn.execute(text("PRAGMA table_info(evaluations)")).fetchall()]
-            if "brick_name" not in cols:
-                conn.execute(text("ALTER TABLE evaluations ADD COLUMN brick_name TEXT"))
-            if "pharmacy_name" not in cols:
-                conn.execute(text("ALTER TABLE evaluations ADD COLUMN pharmacy_name TEXT"))
+            if "doctor_name" not in cols:
+                conn.execute(text("ALTER TABLE evaluations ADD COLUMN doctor_name TEXT"))
+            if "survey_type" not in cols:
+                conn.execute(text("ALTER TABLE evaluations ADD COLUMN survey_type TEXT DEFAULT 'eczane'"))
+                
+            # Questions tablosu için survey_type sütunu
+            q_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(questions)")).fetchall()]
+            if "survey_type" not in q_cols:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN survey_type TEXT DEFAULT 'eczane'"))
+    
     try:
         with engine.begin() as conn:
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_eval_rep ON evaluations(rep_name, created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_eval_rep_type ON evaluations(rep_name, survey_type, created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_eval_survey_type ON evaluations(survey_type)"))
     except Exception:
         pass
 
@@ -187,7 +207,6 @@ def read_csv_guess(path: Path):
     if not path.exists(): 
         return None
     
-    # Önce encoding seçenekleriyle dene
     encodings = ['utf-8', 'utf-8-sig', 'cp1254', 'latin1', 'iso-8859-9', 'windows-1254']
     separators = [",", ";", "\\t", "|"]
     
@@ -197,23 +216,11 @@ def read_csv_guess(path: Path):
                 df = pd.read_csv(path, sep=sep, encoding=encoding)
                 if df.shape[1] == 1 and sep != ",":
                     continue
-                # Başarılı okuma durumunda bilgi ver
                 print(f"CSV okundu: {path.name} (encoding={encoding}, sep='{sep}')")
                 return df
             except Exception:
                 continue
     
-    # Eski yöntemle tekrar dene (fallback)
-    for sep in [",",";","\\t","|"]:
-        try:
-            df = pd.read_csv(path, sep=sep)
-            if df.shape[1] == 1 and sep != ",":
-                continue
-            return df
-        except Exception:
-            continue
-    
-    # Son çare
     try:
         return pd.read_csv(path)
     except Exception:
@@ -231,35 +238,36 @@ def load_questions_from_csv(path: Path):
         raise RuntimeError("Questions CSV parse failed")
 
     cols = [c.lower() for c in df.columns]
-    text_col = None; weight_col = None; cat_col = None
+    print(f"CSV kolonları: {df.columns.tolist()}")
     
-    print(f"CSV kolonları: {df.columns.tolist()}")  # Debug için
-    
-    # Soru metni kolonu - "Anket Soruları" eklendi
+    # Soru metni kolonu
+    text_col = None
     for i, c in enumerate(cols):
         if c in ["soru", "question", "text", "soru_metni", "soru metni", 
-                 "anket soruları", "anket sorulari", "anket soruları"]:
+                 "anket soruları", "anket sorulari"]:
             text_col = df.columns[i]
             break
     
-    # Ağırlık kolonu
+    # Ağırlık kolonu (Skor sütunu)
+    weight_col = None
     for i, c in enumerate(cols):
         if c in ["katsayi", "katsayı", "weight", "puan", "çarpan", "skor"]:
             weight_col = df.columns[i]
             break
     
-    # Kategori kolunu - ÖNCELİKLE "örümcek ağı kategori"yi ara
+    # Kategori kolonu
+    cat_col = None
     for i, c in enumerate(cols):
-        if c in ["örümcek ağı kategori", "orumcek agi kategori", "örümcek ağı kategori"]:
+        if c in ["örümcek ağı kategori", "orumcek agi kategori"]:
             cat_col = df.columns[i]
             break
-
-    # Bulunamazsa diğerlerini dene
-    if cat_col is None:
-        for i, c in enumerate(cols):
-            if c in ["kategori", "category", "spider kategori", "radar kategori"]:
-                cat_col = df.columns[i]
-                break
+    
+    # Segment kolonu (eczane/doktor)
+    segment_col = None
+    for i, c in enumerate(cols):
+        if c in ["segment", "tip", "type"]:
+            segment_col = df.columns[i]
+            break
     
     # Varsayılan değerler
     if text_col is None: 
@@ -267,7 +275,11 @@ def load_questions_from_csv(path: Path):
     if weight_col is None and len(df.columns) > 1: 
         weight_col = df.columns[1]
     
-    print(f"Kullanılan kolonlar - Text: {text_col}, Weight: {weight_col}, Category: {cat_col}")
+    print(f"Kullanılan kolonlar - Text: {text_col}, Weight: {weight_col}, Category: {cat_col}, Segment: {segment_col}")
+    
+    # Mevcut soruları temizle
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM questions"))
     
     records = []
     for _, row in df.iterrows():
@@ -285,7 +297,8 @@ def load_questions_from_csv(path: Path):
             w_raw = row.get(weight_col)
             if w_raw is not None and not (isinstance(w_raw, float) and pd.isna(w_raw)):
                 try: 
-                    w = float(str(w_raw).replace(",", "."))  
+                    w_str = str(w_raw).replace(",", ".")
+                    w = float(w_str)
                 except: 
                     w = 1.0
 
@@ -296,21 +309,29 @@ def load_questions_from_csv(path: Path):
             if cat_raw is not None and not (isinstance(cat_raw, float) and pd.isna(cat_raw)):
                 c = str(cat_raw).strip() or None
 
-        print(f"Soru eklendi: {t[:50]}... | Ağırlık: {w} | Kategori: {c}")
-        records.append((t, w, c))
+        # Survey type (segment)
+        survey_type = "eczane"  # Default
+        if segment_col and segment_col in df.columns:
+            seg_raw = row.get(segment_col)
+            if seg_raw is not None and not (isinstance(seg_raw, float) and pd.isna(seg_raw)):
+                seg_str = str(seg_raw).strip().lower()
+                if seg_str == "doktor":
+                    survey_type = "doktor"
+
+        print(f"Soru eklendi: {t[:50]}... | Ağırlık: {w} | Kategori: {c} | Tip: {survey_type}")
+        records.append((t, w, c, survey_type))
 
     print(f"Toplam {len(records)} soru yüklendi")
     
     # Veritabanına kaydet
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM questions"))
-        for t, w, c in records:
-            conn.execute(text("INSERT INTO questions(text, weight, category) VALUES (:t,:w,:c)"),
-                         {"t": t, "w": w, "c": c})
+        for t, w, c, survey_type in records:
+            conn.execute(text("INSERT INTO questions(text, weight, category, survey_type) VALUES (:t,:w,:c,:st)"),
+                         {"t": t, "w": w, "c": c, "st": survey_type})
 
 def init_questions():
     preferred = [
-        DATA_DIR / "5_Anket_Sorulari.csv",  # Senin dosyan en üstte
+        DATA_DIR / "5_Anket_Sorulari.csv",
         DATA_DIR / "5_Anket_Soruları - Sheet1.csv",
         DATA_DIR / "5_Anket_Soruları.csv",
     ]
@@ -329,13 +350,22 @@ def init_questions():
         print("CSV bulunamadı, örnek sorular ekleniyor")
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM questions"))
+            # Eczane soruları
             for t, w, c in [
-                ("Ziyaret öncesi hazırlıklar eksiksiz yapıldı mı?", 1.0, "Açılış"),
-                ("Ürün mesajı net ve doğru aktarıldı mı?", 1.5, "Sunum"),
-                ("Kapanış ve takip adımı planlandı mı?", 1.2, "Kapanış"),
+                ("Ziyaret öncesi hazırlıklar eksiksiz yapıldı mı?", 1.0, "Müşteri Odaklılık"),
+                ("Ürün mesajı net ve doğru aktarıldı mı?", 1.5, "Sonuç Çevikliği"),
+                ("Kapanış ve takip adımı planlandı mı?", 1.2, "Sonuç Çevikliği"),
             ]:
-                conn.execute(text("INSERT INTO questions(text, weight, category) VALUES (:t,:w,:c)"),
-                             {"t": t, "w": w, "c": c})
+                conn.execute(text("INSERT INTO questions(text, weight, category, survey_type) VALUES (:t,:w,:c,:st)"),
+                             {"t": t, "w": w, "c": c, "st": "eczane"})
+            # Doktor soruları
+            for t, w, c in [
+                ("HCP'nin segmentini dikkate alır", 1.0, "Müşteri Odaklılık"),
+                ("Tüm portföy için medikal bilgiye hakimdir", 1.5, "Öğrenme Çevikliği"),
+                ("Sosyal stil farkındalığını gösterir", 1.2, "Kişisel Farkındalık"),
+            ]:
+                conn.execute(text("INSERT INTO questions(text, weight, category, survey_type) VALUES (:t,:w,:c,:st)"),
+                             {"t": t, "w": w, "c": c, "st": "doktor"})
 
 # --------------------------- Lookups ---------------------------
 def build_lookups():
@@ -422,10 +452,10 @@ class AuthManager:
     def __init__(self, lookups: Dict):
         self.lookups = lookups
         self.passwords = self._load_passwords()
-        self.super_users = {"Hakan Öktem"}  # Süper kullanıcılar
-        self.temp_codes: Dict[str, Dict] = {}  # manager_name → {"code": ..., "expires": ...}
+        self.user_emails = self._load_user_emails()
+        self.super_users = {"Hakan Öktem", "Ceyhan Gırça"}
+        self.temp_codes: Dict[str, Dict] = {}
 
-    # ------------------- CSV Yükleme -------------------
     def _load_passwords(self) -> Dict[str, str]:
         """CSV'den şifreleri yükle"""
         passwords = {}
@@ -447,38 +477,52 @@ class AuthManager:
         print(f"Toplam {len(passwords)} müdür şifresi yüklendi")
         return passwords
 
-    # ------------------- Hash -------------------
+    def _load_user_emails(self) -> Dict[str, str]:
+        """CSV'den kullanıcı email'lerini yükle"""
+        emails = {}
+        csv_path = DATA_DIR / "6_Mudur_Sifreler.csv"
+        df = read_csv_guess(csv_path)
+        
+        if df is not None:
+            manager_col = pick_column(df, ["manager", "müdür", "mudur", "bölge müdürü"])
+            email_col = pick_column(df, ["email", "e-mail", "mail", "e_mail"], default_idx=2)
+            
+            for _, row in df.iterrows():
+                mgr = str(row.get(manager_col, "")).strip()
+                email = str(row.get(email_col, "")).strip()
+                
+                if mgr and email and mgr != "nan" and email != "nan":
+                    emails[mgr] = email
+                    print(f"Email yüklendi: {mgr} -> {email}")
+        
+        print(f"Toplam {len(emails)} kullanıcı email'i yüklendi")
+        return emails
+
+    def get_user_email(self, manager_name: str) -> str:
+        """Kullanıcının email adresini döndür"""
+        return self.user_emails.get(manager_name, "")
+
     def _hash_password(self, password: str) -> str:
-        """Şifreyi SHA-256 ile hash'le"""
         return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
-    # ------------------- Süper Kullanıcı -------------------
     def is_super_user(self, manager_name: str) -> bool:
-        """Süper kullanıcı kontrolü"""
         return manager_name in self.super_users
 
-    # ------------------- Kullanılabilir Müdürler -------------------
     def get_available_managers(self) -> List[str]:
-        """Giriş yapabilecek müdürleri döndür"""
         available_managers = list(self.super_users)
 
         if not self.passwords:
-            # Şifre dosyası yoksa tüm müdürleri ekle (süper kullanıcılar hariç)
             for mgr in self.lookups.get("managers", []):
                 if mgr not in self.super_users:
                     available_managers.append(mgr)
         else:
-            # Şifresi olan müdürleri ekle (süper kullanıcılar hariç)
             for mgr in self.lookups.get("managers", []):
                 if mgr in self.passwords and mgr not in self.super_users:
                     available_managers.append(mgr)
 
         return sorted(set(available_managers))
 
-    # ------------------- Giriş Kontrol -------------------
     def authenticate_manager(self, manager_name: str, password: str = None) -> bool:
-        """Müdür adı ve şifre kontrolü"""
-        # Süper kullanıcı kontrolü
         if self.is_super_user(manager_name):
             if not password:
                 return False
@@ -487,7 +531,6 @@ class AuthManager:
                 return hashed_input == self.passwords[manager_name]
             return False
 
-        # Normal kullanıcılar için mevcut sistem
         if not self.passwords:
             return manager_name in self.lookups.get("managers", [])
 
@@ -500,7 +543,6 @@ class AuthManager:
         hashed_input = self._hash_password(password)
         return hashed_input == self.passwords[manager_name]
 
-    # ------------------- Lookup İşlemleri -------------------
     def _empty_lookups(self) -> Dict:
         return {
             "managers": [],
@@ -545,16 +587,13 @@ class AuthManager:
             "brick_to_pharmacies": {b: brick_to_pharmacies.get(b, []) for b in manager_bricks},
         }
 
-    # ------------------- Şifre Değiştir -------------------
     def change_password(self, manager_name: str, old_password: str, new_password: str) -> bool:
         if not self.authenticate_manager(manager_name, old_password):
             return False
         self.passwords[manager_name] = self._hash_password(new_password)
         return self._save_passwords_to_csv()
 
-    # ------------------- Şifre Sıfırlama -------------------
     def reset_password_request(self, manager_name: str) -> dict:
-        """Şifre sıfırlama talebi - geçici kod üret ve gönder"""
         if manager_name not in self.passwords and manager_name not in self.super_users:
             return {"error": "Kullanıcı bulunamadı"}
         
@@ -572,7 +611,6 @@ class AuthManager:
         }
     
     def reset_password_with_code(self, manager_name: str, temp_code: str, new_password: str) -> bool:
-        """Geçici kod ile şifre sıfırlama"""
         if manager_name not in self.temp_codes:
             return False
 
@@ -588,7 +626,6 @@ class AuthManager:
         del self.temp_codes[manager_name]
         return self._save_passwords_to_csv()
 
-    # ------------------- CSV Kaydet -------------------
     def _save_passwords_to_csv(self) -> bool:
         try:
             csv_path = DATA_DIR / "6_Mudur_Sifreler.csv"
@@ -661,43 +698,35 @@ def _daterange_defaults(date_from: Optional[str], date_to: Optional[str]) -> Tup
     days = (d2 - d1).days + 1
     return (d1.isoformat(), d2.isoformat(), days)
 
-def _rep_dominant_region(rep: str, dfrom: str, dto: str) -> Optional[str]:
-    with engine.begin() as conn:
-        rows = conn.execute(text(f"""
-            SELECT COALESCE(region_name,'') AS r, COUNT(*) c
-            FROM evaluations
-            WHERE rep_name=:rep AND {sql_date_cast('e.created_at')} BETWEEN :d1 AND :d2
-            GROUP BY r ORDER BY c DESC
-            LIMIT 1
-        """), {"rep": rep, "d1": dfrom, "d2": dto}).fetchall()
-    if rows and rows[0][0]:
-        return rows[0][0]
-    return None
-
-def _category_vector_for_query(where_sql: str, params: dict) -> Tuple[List[float], dict]:
+def _category_vector_for_query(where_sql: str, params: dict, survey_type: str = "eczane") -> Tuple[List[float], dict]:
+    """Kategori vektörü hesaplama - anket türüne göre"""
     sql = f"""
         SELECT a.answer, a.weight AS w, q.category AS cat
         FROM answers a
         JOIN evaluations e ON e.id = a.evaluation_id
         JOIN questions   q ON q.id = a.question_id
-        WHERE {where_sql}
+        WHERE {where_sql} AND COALESCE(e.survey_type, 'eczane') = :survey_type
     """
     
     with engine.begin() as conn:
-        rows = conn.execute(text(sql), params).mappings().all()
+        rows = conn.execute(text(sql), {**params, "survey_type": survey_type}).mappings().all()
         meta = conn.execute(text(f"""
             SELECT COUNT(DISTINCT e.id) AS cnt, MAX(e.created_at) AS last_at
             FROM evaluations e
-            WHERE {where_sql.replace('a.','').replace('q.','')}
-        """), params).mappings().first()
+            WHERE {where_sql.replace('a.','').replace('q.','')} 
+            AND COALESCE(e.survey_type, 'eczane') = :survey_type
+        """), {**params, "survey_type": survey_type}).mappings().first()
 
+    # Anket türüne göre kategori listesi al
+    categories = get_survey_categories(survey_type)
+    
     num = defaultdict(float)
     den = defaultdict(float)
     
     for r in rows:
         answer = int(r["answer"])
         w = float(r["w"] or 0.0)
-        cats = parse_category_tags(r["cat"])
+        cats = parse_category_tags(r["cat"], survey_type)
         for cat, share in cats:
             contrib = w * float(share)
             den[cat] += contrib
@@ -705,23 +734,29 @@ def _category_vector_for_query(where_sql: str, params: dict) -> Tuple[List[float
                 num[cat] += contrib
 
     vec = []
-    for c in CATS_ORDER:
+    for c in categories:
         if den[c] > 0:
             vec.append(round(100.0 * num[c] / den[c], 1))
         else:
             vec.append(0.0)
     
-    return vec, {"samples": int(meta["cnt"] or 0), "last_eval_at": meta["last_at"]}
+    return vec, {
+        "samples": int(meta["cnt"] or 0), 
+        "last_eval_at": meta["last_at"],
+        "categories": categories
+    }
 
-def _calculate_scores(rows):
-    """Temel skor hesaplama fonksiyonu"""
+def _calculate_scores(rows, survey_type: str = "eczane"):
+    """Temel skor hesaplama fonksiyonu - anket türüne göre"""
+    categories = get_survey_categories(survey_type)
+    
     num = defaultdict(float)
     den = defaultdict(float)
     
     for r in rows:
         answer = int(r["answer"])
         w = float(r["w"] or 0.0)
-        cats = parse_category_tags(r["cat"])
+        cats = parse_category_tags(r["cat"], survey_type)
         
         for cat, share in cats:
             contrib = w * float(share)
@@ -730,7 +765,7 @@ def _calculate_scores(rows):
                 num[cat] += contrib
     
     vec = []
-    for c in CATS_ORDER:
+    for c in categories:
         if den[c] > 0:
             vec.append(round(100.0 * num[c] / den[c], 1))
         else:
@@ -738,18 +773,16 @@ def _calculate_scores(rows):
     
     return vec
 
-def _calculate_recent_performance(rows, limit_evaluations=7):
+def _calculate_recent_performance(rows, survey_type: str = "eczane", limit_evaluations=7):
     """Son N değerlendirmenin ortalaması"""
     if not rows:
-        return [0.0] * len(CATS_ORDER), {"method": "recent", "evaluations_used": 0}
+        categories = get_survey_categories(survey_type)
+        return [0.0] * len(categories), {"method": "recent", "evaluations_used": 0}
     
-    # Evaluation ID'leri için unique created_at'leri al ve son N'ini seç
     eval_dates = sorted(list(set(row["created_at"] for row in rows)), reverse=True)[:limit_evaluations]
-    
-    # Sadece bu evaluation'ların verilerini kullan
     recent_rows = [row for row in rows if row["created_at"] in eval_dates]
     
-    vec = _calculate_scores(recent_rows)
+    vec = _calculate_scores(recent_rows, survey_type)
     
     return vec, {
         "method": "recent",
@@ -760,17 +793,18 @@ def _calculate_recent_performance(rows, limit_evaluations=7):
         }
     }
 
-def _calculate_weighted_performance(rows):
-    """Tarih ağırlıklı hesaplama - yeni anketler daha ağır"""
+def _calculate_weighted_performance(rows, survey_type: str = "eczane"):
+    """Tarih ağırlıklı hesaplama"""
     if not rows:
-        return [0.0] * len(CATS_ORDER), {"method": "weighted", "samples": 0}
+        categories = get_survey_categories(survey_type)
+        return [0.0] * len(categories), {"method": "weighted", "samples": 0}
     
-    # En eski ve en yeni tarihleri bul
     dates = [datetime.fromisoformat(row["created_at"][:19]) for row in rows]
     oldest_date = min(dates)
     newest_date = max(dates)
     total_days = (newest_date - oldest_date).days or 1
     
+    categories = get_survey_categories(survey_type)
     num = defaultdict(float)
     den = defaultdict(float)
     
@@ -779,11 +813,10 @@ def _calculate_weighted_performance(rows):
         w = float(r["w"] or 0.0)
         row_date = datetime.fromisoformat(r["created_at"][:19])
         
-        # Tarih ağırlığı: yeni anketler maksimum %100 daha ağır
         progress = (row_date - oldest_date).days / total_days
-        time_weight = 1.0 + progress  # 1.0 - 2.0 arasında
+        time_weight = 1.0 + progress
         
-        cats = parse_category_tags(r["cat"])
+        cats = parse_category_tags(r["cat"], survey_type)
         for cat, share in cats:
             weighted_contribution = w * float(share) * time_weight
             den[cat] += weighted_contribution
@@ -791,7 +824,7 @@ def _calculate_weighted_performance(rows):
                 num[cat] += weighted_contribution
     
     vec = []
-    for c in CATS_ORDER:
+    for c in categories:
         if den[c] > 0:
             vec.append(round(100.0 * num[c] / den[c], 1))
         else:
@@ -803,25 +836,25 @@ def _calculate_weighted_performance(rows):
         "time_span_days": total_days
     }
 
-def _calculate_trend_analysis(rows):
+def _calculate_trend_analysis(rows, survey_type: str = "eczane"):
     """Gelişim trendi analizi"""
+    categories = get_survey_categories(survey_type)
+    
     if not rows:
-        return [0.0] * len(CATS_ORDER), {"method": "trend", "insufficient_data": True}
+        return [0.0] * len(categories), {"method": "trend", "insufficient_data": True}
     
     eval_dates = sorted(list(set(row["created_at"] for row in rows)))
     
     if len(eval_dates) < 2:
-        # Tek anket varsa sadece mevcut skoru göster
-        vec = _calculate_scores(rows)
+        vec = _calculate_scores(rows, survey_type)
         return vec, {
             "method": "trend",
             "current_scores": vec,
             "early_scores": vec,
-            "improvement": [0.0] * len(CATS_ORDER),
+            "improvement": [0.0] * len(categories),
             "insufficient_data": True
         }
     
-    # İlk yarı vs son yarı karşılaştırması
     mid_point = len(eval_dates) // 2
     early_dates = eval_dates[:mid_point] if mid_point > 0 else [eval_dates[0]]
     recent_dates = eval_dates[mid_point:]
@@ -829,17 +862,16 @@ def _calculate_trend_analysis(rows):
     early_rows = [row for row in rows if row["created_at"] in early_dates]
     recent_rows = [row for row in rows if row["created_at"] in recent_dates]
     
-    early_scores = _calculate_scores(early_rows)
-    recent_scores = _calculate_scores(recent_rows)
+    early_scores = _calculate_scores(early_rows, survey_type)
+    recent_scores = _calculate_scores(recent_rows, survey_type)
     
-    # Gelişim hesaplama
     improvement = []
     for early, recent in zip(early_scores, recent_scores):
         if early > 0:
-            change = recent - early  # Basit fark
+            change = recent - early
             improvement.append(round(change, 1))
         else:
-            improvement.append(recent)  # Eğer başlangıçta 0 idiyse, şimdiki değer gelişim
+            improvement.append(recent)
     
     return recent_scores, {
         "method": "trend",
@@ -851,28 +883,21 @@ def _calculate_trend_analysis(rows):
         "total_evaluations": len(eval_dates)
     }
 
-def _calculate_target_based(rows, targets=None):
+def _calculate_target_based(rows, survey_type: str = "eczane", targets=None):
     """Hedefe yakınlık bazlı hesaplama"""
+    categories = get_survey_categories(survey_type)
+    
     if targets is None:
-        # Her kategori için hedef % - isteğe göre ayarlanabilir
-        targets = {
-            "Açılış": 80,
-            "İhtiyaç Belirleme": 80, 
-            "Analiz": 80,
-            "Sunum": 80,
-            "Kapanış": 80,
-            "Genel": 80
-        }
+        targets = {cat: 80 for cat in categories}
     
-    current_scores = _calculate_scores(rows)
+    current_scores = _calculate_scores(rows, survey_type)
     
-    # Hedefe yakınlık yüzdesini hesapla
     target_achievement = []
     target_values = []
     
-    for i, cat in enumerate(CATS_ORDER):
+    for i, cat in enumerate(categories):
         current = current_scores[i]
-        target = targets.get(cat, 80)  # Varsayılan hedef %80
+        target = targets.get(cat, 80)
         target_values.append(target)
         
         if target > 0:
@@ -889,50 +914,51 @@ def _calculate_target_based(rows, targets=None):
         "categories_at_target": sum(1 for a in target_achievement if a >= 100)
     }
 
-def _category_vector_for_query_enhanced(where_sql: str, params: dict, method: str = "traditional") -> Tuple[List[float], dict]:
-    """Gelişmiş radar hesaplama - farklı metodlar"""
+def _category_vector_for_query_enhanced(where_sql: str, params: dict, method: str = "traditional", survey_type: str = "eczane") -> Tuple[List[float], dict]:
+    """Gelişmiş radar hesaplama - anket türü desteği ile"""
     sql = f"""
         SELECT a.answer, a.weight AS w, q.category AS cat, e.created_at
         FROM answers a
         JOIN evaluations e ON e.id = a.evaluation_id
         JOIN questions   q ON q.id = a.question_id
-        WHERE {where_sql}
+        WHERE {where_sql} AND COALESCE(e.survey_type, 'eczane') = :survey_type
         ORDER BY e.created_at DESC
     """
     
     print(f"ENHANCED CATEGORY VECTOR - SQL: {sql}")
     print(f"ENHANCED CATEGORY VECTOR - PARAMS: {params}")
-    print(f"ENHANCED CATEGORY VECTOR - METHOD: {method}")
+    print(f"ENHANCED CATEGORY VECTOR - METHOD: {method}, SURVEY_TYPE: {survey_type}")
     
     with engine.begin() as conn:
-        rows = conn.execute(text(sql), params).mappings().all()
+        rows = conn.execute(text(sql), {**params, "survey_type": survey_type}).mappings().all()
         meta_basic = conn.execute(text(f"""
             SELECT COUNT(DISTINCT e.id) AS cnt, MAX(e.created_at) AS last_at
             FROM evaluations e
-            WHERE {where_sql.replace('a.','').replace('q.','')}
-        """), params).mappings().first()
+            WHERE {where_sql.replace('a.','').replace('q.','')} 
+            AND COALESCE(e.survey_type, 'eczane') = :survey_type
+        """), {**params, "survey_type": survey_type}).mappings().first()
     
     print(f"ENHANCED CATEGORY VECTOR - Total rows: {len(rows)}")
     
-    # Temel meta bilgileri
     base_meta = {
         "samples": int(meta_basic["cnt"] or 0),
-        "last_eval_at": meta_basic["last_at"]
+        "last_eval_at": meta_basic["last_at"],
+        "survey_type": survey_type,
+        "categories": get_survey_categories(survey_type)
     }
     
     if method == "recent":
-        vec, method_meta = _calculate_recent_performance(rows, 7)
+        vec, method_meta = _calculate_recent_performance(rows, survey_type, 7)
     elif method == "weighted":
-        vec, method_meta = _calculate_weighted_performance(rows)
+        vec, method_meta = _calculate_weighted_performance(rows, survey_type)
     elif method == "trend":
-        vec, method_meta = _calculate_trend_analysis(rows)
+        vec, method_meta = _calculate_trend_analysis(rows, survey_type)
     elif method == "target":
-        vec, method_meta = _calculate_target_based(rows)
+        vec, method_meta = _calculate_target_based(rows, survey_type)
     else:  # traditional
-        vec, method_meta = _category_vector_for_query(where_sql, params)
+        vec, method_meta = _category_vector_for_query(where_sql, {**params, "survey_type": survey_type}, survey_type)
         return vec, {**base_meta, "method": "traditional"}
     
-    # Meta bilgileri birleştir
     combined_meta = {**base_meta, **method_meta}
     
     print(f"ENHANCED CATEGORY VECTOR - Final vector: {vec}")
@@ -946,19 +972,23 @@ def _category_vector_for_query_enhanced(where_sql: str, params: dict, method: st
 def api_rep_radar(rep: str, manager: Optional[str] = None,
                   date_from: Optional[str] = None, date_to: Optional[str] = None,
                   method: str = "traditional", prev: int = 0,
+                  survey_type: str = "eczane",
                   current_user: str = Depends(get_current_user)):
-    """Radar API - Süper kullanıcı desteği eklendi"""
+    """Radar API - Anket türü desteği eklendi"""
     if not rep:
         return JSONResponse({"error": "rep required"}, status_code=400)
 
+    # Survey type validation
+    if survey_type not in SURVEY_TYPES:
+        survey_type = "eczane"
+
     d1, d2, span_days = _daterange_defaults(date_from, date_to)
     
-    print(f"RADAR API - User: {current_user}, Rep: {rep}, Method: {method}")
+    print(f"RADAR API - User: {current_user}, Rep: {rep}, Method: {method}, Survey Type: {survey_type}")
     
     where = f"e.rep_name = :rep AND {sql_date_cast('e.created_at')} BETWEEN :d1 AND :d2"
     params = {"rep": rep, "d1": d1, "d2": d2}
     
-    # Süper kullanıcı değilse manager kontrolü ekle
     if not auth_manager.is_super_user(current_user):
         if manager:
             where += " AND e.manager_name = :mgr"
@@ -967,12 +997,13 @@ def api_rep_radar(rep: str, manager: Optional[str] = None,
             where += " AND e.manager_name = :current_user"
             params["current_user"] = current_user
 
-    curr_vec, meta = _category_vector_for_query_enhanced(where, params, method)
+    curr_vec, meta = _category_vector_for_query_enhanced(where, params, method, survey_type)
     
     payload = {
-        "labels": CATS_ORDER,
+        "labels": get_survey_categories(survey_type),
         "data": curr_vec,
         "method": method,
+        "survey_type": survey_type,
         "range": {"from": d1, "to": d2},
         **meta
     }
@@ -991,61 +1022,39 @@ def api_rep_radar(rep: str, manager: Optional[str] = None,
             else:
                 prev_params["current_user"] = current_user
         
-        p_vec, p_meta = _category_vector_for_query_enhanced(prev_where, prev_params, method)
+        p_vec, p_meta = _category_vector_for_query_enhanced(prev_where, prev_params, method, survey_type)
         payload["prev"] = p_vec
         payload["prevRange"] = {"from": prev_from, "to": prev_to}
         payload["prevMeta"] = p_meta
 
     return JSONResponse(payload)
 
-@app.get("/api/rep-radar-csv")
-def api_rep_radar_csv(rep: str, date_from: Optional[str] = None, date_to: Optional[str] = None):
-    d1, d2, _ = _daterange_defaults(date_from, date_to)
-    where = f"e.rep_name = :rep AND {sql_date_cast('e.created_at')} BETWEEN :d1 AND :d2"
-    vec, _ = _category_vector_for_query(where, {"rep": rep, "d1": d1, "d2": d2})
-    rows = ["Kategori,Yuzde"] + [f"{cat},{val}" for cat, val in zip(CATS_ORDER, vec)]
-    csv_data = "\n".join(rows)
-    return HTMLResponse(content=csv_data, media_type="text/csv",
-                        headers={"Content-Disposition": f'attachment; filename="radar_{rep}_{d1}_{d2}.csv"'})
-
-@app.get("/api/radar-methods")
-def get_radar_methods():
-    """Radar hesaplama yöntemlerinin açıklamaları"""
+@app.get("/api/survey-types")
+def get_survey_types():
+    """Anket türlerini döndür"""
     return JSONResponse({
-        "methods": {
-            "traditional": {
-                "name": "Geleneksel",
-                "description": "Tüm geçmiş anketlerin ağırlıklı ortalaması",
-                "icon": "📊",
-                "best_for": "Genel performans görünümü"
-            },
-            "recent": {
-                "name": "Mevcut Durum",
-                "description": "Son 7 anketin ortalaması",
-                "icon": "📈",
-                "best_for": "Güncel performans değerlendirmesi"
-            },
-            "weighted": {
-                "name": "Tarih Ağırlıklı",
-                "description": "Yeni anketler daha ağır sayılır",
-                "icon": "⚖️",
-                "best_for": "Gelişimi ödüllendiren değerlendirme"
-            },
-            "trend": {
-                "name": "Gelişim Trendi",
-                "description": "İlk yarı vs son yarı karşılaştırması",
-                "icon": "📉📈",
-                "best_for": "İlerleme analizi ve coaching"
-            },
-            "target": {
-                "name": "Hedefe Yakınlık",
-                "description": "Belirlenen hedeflere ne kadar yakın",
-                "icon": "🎯",
-                "best_for": "Hedef odaklı performans ölçümü"
-            }
-        },
-        "default": "recent",
-        "recommended": ["recent", "trend"]
+        "types": SURVEY_TYPES,
+        "default": "eczane"
+    })
+
+@app.get("/api/questions/{survey_type}")
+def get_questions_by_type(survey_type: str, current_user: str = Depends(get_current_user)):
+    """Anket türüne göre soruları döndür"""
+    if survey_type not in SURVEY_TYPES:
+        return JSONResponse({"error": "Invalid survey type"}, status_code=400)
+    
+    with engine.begin() as conn:
+        questions = conn.execute(text("""
+            SELECT id, text, weight, category
+            FROM questions 
+            WHERE COALESCE(survey_type, 'eczane') = :survey_type
+            ORDER BY id
+        """), {"survey_type": survey_type}).mappings().all()
+    
+    return JSONResponse({
+        "questions": [dict(q) for q in questions],
+        "survey_info": SURVEY_TYPES[survey_type],
+        "categories": get_survey_categories(survey_type)
     })
 
 @app.get("/lookups")
@@ -1057,7 +1066,6 @@ def get_pharmacy_info(pharmacy_name: str, current_user: str = Depends(get_curren
     """Eczane seçildiğinde brick bilgisini döndür"""
     user_lookups = auth_manager.get_user_specific_lookups(current_user)
     
-    # Eczanenin hangi brick'te olduğunu bul
     for brick, pharmacies in user_lookups["brick_to_pharmacies"].items():
         if pharmacy_name in pharmacies:
             return JSONResponse({
@@ -1069,6 +1077,379 @@ def get_pharmacy_info(pharmacy_name: str, current_user: str = Depends(get_curren
         "error": "Brick bulunamadı",
         "success": False
     }, status_code=404)
+
+# --------------------------- DASHBOARD API ENDPOINTS ---------------------------
+
+@app.get("/api/dashboard-stats")
+def dashboard_stats(current_user: str = Depends(get_current_user),
+                   time_range: int = 30,
+                   rep_filter: Optional[str] = None,
+                   brick_filter: Optional[str] = None,
+                   survey_type_filter: Optional[str] = None):
+    """Dashboard için temel istatistikler - anket türü filtreleme eklendi"""
+    
+    end_date = date.today()
+    start_date = end_date - timedelta(days=time_range)
+    
+    where_conditions = [f"{sql_date_cast('e.created_at')} BETWEEN :start_date AND :end_date"]
+    params = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()}
+    
+    if not auth_manager.is_super_user(current_user):
+        where_conditions.append("e.manager_name = :current_user")
+        params["current_user"] = current_user
+    
+    if rep_filter and rep_filter.strip():
+        where_conditions.append("e.rep_name = :rep_filter")
+        params["rep_filter"] = rep_filter.strip()
+    
+    if brick_filter and brick_filter.strip():
+        where_conditions.append("e.brick_name = :brick_filter")
+        params["brick_filter"] = brick_filter.strip()
+    
+    # Anket türü filtresi
+    if survey_type_filter and survey_type_filter in SURVEY_TYPES:
+        where_conditions.append("COALESCE(e.survey_type, 'eczane') = :survey_type_filter")
+        params["survey_type_filter"] = survey_type_filter
+    
+    where_clause = " AND ".join(where_conditions)
+    print(f"DASHBOARD STATS - WHERE: {where_clause}")
+    print(f"DASHBOARD STATS - PARAMS: {params}")
+    
+    with engine.begin() as conn:
+        # Temel istatistikler
+        basic_stats = conn.execute(text(f"""
+            SELECT 
+                COUNT(*) as total_evaluations,
+                COUNT(DISTINCT e.rep_name) as active_reps,
+                COUNT(DISTINCT CASE WHEN COALESCE(e.survey_type, 'eczane') = 'eczane' 
+                      THEN e.pharmacy_name ELSE e.doctor_name END) as active_targets,
+                AVG(e.percentage) as avg_performance,
+                MAX(e.created_at) as last_evaluation
+            FROM evaluations e
+            WHERE {where_clause}
+        """), params).mappings().first()
+        
+        # Anket türü dağılımı
+        survey_distribution = conn.execute(text(f"""
+            SELECT 
+                COALESCE(e.survey_type, 'eczane') as survey_type,
+                COUNT(*) as count
+            FROM evaluations e
+            WHERE {where_clause}
+            GROUP BY COALESCE(e.survey_type, 'eczane')
+        """), params).mappings().all()
+        
+        # Performans dağılımı
+        performance_distribution = conn.execute(text(f"""
+            SELECT 
+                CASE 
+                    WHEN e.percentage >= 90 THEN 'Mükemmel'
+                    WHEN e.percentage >= 80 THEN 'Çok İyi'
+                    WHEN e.percentage >= 70 THEN 'İyi'
+                    ELSE 'Gelişmeli'
+                END as performance_level,
+                COUNT(*) as count
+            FROM evaluations e
+            WHERE {where_clause}
+            GROUP BY performance_level
+        """), params).mappings().all()
+        
+        # Günlük aktivite
+        daily_activity = conn.execute(text(f"""
+            SELECT 
+                {sql_date_cast('e.created_at')} as eval_date,
+                COUNT(*) as daily_count,
+                COALESCE(e.survey_type, 'eczane') as survey_type
+            FROM evaluations e
+            WHERE {where_clause} 
+                AND {sql_date_cast('e.created_at')} >= :recent_date
+            GROUP BY {sql_date_cast('e.created_at')}, COALESCE(e.survey_type, 'eczane')
+            ORDER BY eval_date DESC
+            LIMIT 14
+        """), {**params, "recent_date": (end_date - timedelta(days=7)).isoformat()}).mappings().all()
+    
+    return JSONResponse({
+        "total_evaluations": int(basic_stats["total_evaluations"] or 0),
+        "active_reps": int(basic_stats["active_reps"] or 0),
+        "active_targets": int(basic_stats["active_targets"] or 0),  # eczane veya doktor sayısı
+        "avg_performance": round(basic_stats["avg_performance"] or 0, 1),
+        "last_evaluation": basic_stats["last_evaluation"],
+        "survey_distribution": [dict(row) for row in survey_distribution],
+        "performance_distribution": [dict(row) for row in performance_distribution],
+        "daily_activity": [dict(row) for row in daily_activity],
+        "time_range": time_range,
+        "filters": {
+            "rep_filter": rep_filter,
+            "brick_filter": brick_filter,
+            "survey_type_filter": survey_type_filter
+        }
+    })
+
+# Dashboard chart endpoint'ını düzelt - "Tümü" seçeneği için veri birleştirme
+@app.get("/api/dashboard-charts")
+def dashboard_charts(current_user: str = Depends(get_current_user),
+                    time_range: int = 30,
+                    chart_type: str = "performance_trend",
+                    method: str = "traditional",
+                    rep_filter: Optional[str] = None,
+                    brick_filter: Optional[str] = None,
+                    survey_type_filter: Optional[str] = None):
+    """Dashboard grafik verileri - Tümü seçeneği için düzeltilmiş veri birleştirme"""
+    
+    end_date = date.today()
+    start_date = end_date - timedelta(days=time_range)
+    
+    where_conditions = [f"{sql_date_cast('e.created_at')} BETWEEN :start_date AND :end_date"]
+    params = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()}
+    
+    if not auth_manager.is_super_user(current_user):
+        where_conditions.append("e.manager_name = :current_user")
+        params["current_user"] = current_user
+    
+    if rep_filter and rep_filter.strip():
+        where_conditions.append("e.rep_name = :rep_filter")
+        params["rep_filter"] = rep_filter.strip()
+    
+    if brick_filter and brick_filter.strip():
+        where_conditions.append("e.brick_name = :brick_filter") 
+        params["brick_filter"] = brick_filter.strip()
+    
+    # Survey type filtresi - Tümü için boş bırak
+    if survey_type_filter and survey_type_filter in SURVEY_TYPES:
+        where_conditions.append("COALESCE(e.survey_type, 'eczane') = :survey_type_filter")
+        params["survey_type_filter"] = survey_type_filter
+    
+    where_clause = " AND ".join(where_conditions)
+    
+    with engine.begin() as conn:
+        if chart_type == "performance_trend":
+            chart_data = conn.execute(text(f"""
+                SELECT 
+                    {sql_date_cast('e.created_at')} as eval_date,
+                    AVG(e.percentage) as avg_performance,
+                    COUNT(*) as count,
+                    COALESCE(e.survey_type, 'eczane') as survey_type
+                FROM evaluations e
+                WHERE {where_clause}
+                GROUP BY {sql_date_cast('e.created_at')}, COALESCE(e.survey_type, 'eczane')
+                ORDER BY eval_date
+            """), params).mappings().all()
+            
+            # Anket türüne göre dataset'leri ayır
+            eczane_data = [row for row in chart_data if row["survey_type"] == "eczane"]
+            doktor_data = [row for row in chart_data if row["survey_type"] == "doktor"]
+            
+            # Tüm tarihleri birleştir ve sırala
+            all_dates = sorted(list(set(row["eval_date"] for row in chart_data)))
+            
+            datasets = []
+            
+            if eczane_data:
+                # Eczane verilerini tarih sırasına göre düzenle
+                eczane_dict = {row["eval_date"]: row["avg_performance"] for row in eczane_data}
+                eczane_values = [round(eczane_dict.get(date, 0), 1) for date in all_dates]
+                
+                datasets.append({
+                    "label": "Eczane Performansı (%)",
+                    "data": eczane_values,
+                    "borderColor": "#3b82f6",
+                    "backgroundColor": "rgba(59, 130, 246, 0.1)",
+                    "tension": 0.4,
+                    "fill": False
+                })
+            
+            if doktor_data:
+                # Doktor verilerini tarih sırasına göre düzenle
+                doktor_dict = {row["eval_date"]: row["avg_performance"] for row in doktor_data}
+                doktor_values = [round(doktor_dict.get(date, 0), 1) for date in all_dates]
+                
+                datasets.append({
+                    "label": "Doktor Performansı (%)",
+                    "data": doktor_values,
+                    "borderColor": "#10b981",
+                    "backgroundColor": "rgba(16, 185, 129, 0.1)",
+                    "tension": 0.4,
+                    "fill": False
+                })
+            
+            return JSONResponse({
+                "labels": all_dates,
+                "datasets": datasets,
+                "type": "line"
+            })
+            
+        elif chart_type == "rep_performance":
+            chart_data = conn.execute(text(f"""
+                SELECT 
+                    e.rep_name,
+                    COALESCE(e.survey_type, 'eczane') as survey_type,
+                    COUNT(*) as evaluation_count,
+                    AVG(e.percentage) as avg_performance
+                FROM evaluations e
+                WHERE {where_clause}
+                GROUP BY e.rep_name, COALESCE(e.survey_type, 'eczane')
+                HAVING COUNT(*) >= 2
+                ORDER BY avg_performance DESC
+                LIMIT 15
+            """), params).mappings().all()
+            
+            return JSONResponse({
+                "labels": [f"{row['rep_name']} ({row['survey_type']})" for row in chart_data],
+                "datasets": [{
+                    "label": "Ortalama Performans (%)",
+                    "data": [round(row["avg_performance"], 1) for row in chart_data],
+                    "backgroundColor": [
+                        "#10b981" if row["avg_performance"] >= 85 else
+                        "#f59e0b" if row["avg_performance"] >= 70 else
+                        "#ef4444" for row in chart_data
+                    ]
+                }],
+                "type": "bar"
+            })
+            
+        elif chart_type == "category_performance":
+            # *** BU KISIM DÜZELTİLDİ ***
+            
+            # "Tümü" seçildiğinde birleştirilmiş kategori performansı hesapla
+            if not survey_type_filter or survey_type_filter.strip() == "":
+                print("CATEGORY PERFORMANCE: Calculating combined data for 'Tümü'")
+                
+                # Doktor kategorilerini kullan (5 kategori)
+                target_categories = get_survey_categories("doktor")
+                
+                # Her kategori için hem eczane hem doktor verilerini birleştir
+                category_scores = []
+                for cat in target_categories:
+                    print(f"Processing category: {cat}")
+                    
+                    # Bu kategori için tüm cevapları al (hem eczane hem doktor)
+                    cat_result = conn.execute(text(f"""
+                        SELECT 
+                            AVG(CASE WHEN a.answer = 1 THEN 100.0 ELSE 0.0 END) as avg_score,
+                            COUNT(*) as answer_count,
+                            COALESCE(e.survey_type, 'eczane') as survey_type
+                        FROM answers a
+                        JOIN evaluations e ON e.id = a.evaluation_id
+                        JOIN questions q ON q.id = a.question_id
+                        WHERE {where_clause}
+                        AND (q.category LIKE :cat_pattern OR q.category IS NULL)
+                        GROUP BY COALESCE(e.survey_type, 'eczane')
+                    """), {**params, "cat_pattern": f"%{cat}%"}).mappings().all()
+                    
+                    # Eczane ve doktor verilerini birleştir (ağırlıklı ortalama)
+                    total_count = 0
+                    total_score = 0.0
+                    
+                    for result in cat_result:
+                        count = result["answer_count"] or 0
+                        score = result["avg_score"] or 0.0
+                        total_count += count
+                        total_score += score * count
+                        print(f"  {result['survey_type']}: {score}% ({count} cevap)")
+                    
+                    final_score = (total_score / total_count) if total_count > 0 else 0.0
+                    category_scores.append(round(final_score, 1))
+                    
+                    print(f"  Final score for {cat}: {final_score}% (total: {total_count} cevap)")
+                
+                chart_title = "Kategori Performansı - Tüm Anketler (Birleşik)"
+                
+            else:
+                # Belirli bir anket türü seçildi
+                target_survey_type = survey_type_filter
+                target_categories = get_survey_categories(target_survey_type)
+                
+                print(f"CATEGORY PERFORMANCE: Calculating data for {target_survey_type}")
+                
+                category_scores = []
+                for cat in target_categories:
+                    cat_result = conn.execute(text(f"""
+                        SELECT 
+                            AVG(CASE WHEN a.answer = 1 THEN 100.0 ELSE 0.0 END) as avg_score,
+                            COUNT(*) as answer_count
+                        FROM answers a
+                        JOIN evaluations e ON e.id = a.evaluation_id
+                        JOIN questions q ON q.id = a.question_id
+                        WHERE {where_clause} 
+                        AND COALESCE(e.survey_type, 'eczane') = :target_survey_type
+                        AND (q.category LIKE :cat_pattern OR q.category IS NULL)
+                    """), {**params, "target_survey_type": target_survey_type, "cat_pattern": f"%{cat}%"}).scalar()
+                    
+                    category_scores.append(round(cat_result or 0, 1))
+                
+                chart_title = f"Kategori Performansı - {SURVEY_TYPES[target_survey_type]['name']}"
+            
+            return JSONResponse({
+                "labels": target_categories,
+                "datasets": [{
+                    "label": f"{chart_title} (%)",
+                    "data": category_scores,
+                    "backgroundColor": "rgba(59, 130, 246, 0.2)",
+                    "borderColor": "#3b82f6", 
+                    "pointBackgroundColor": "#3b82f6",
+                    "pointBorderColor": "#fff",
+                    "borderWidth": 2
+                }],
+                "type": "radar",
+                "method": method,
+                "survey_type": survey_type_filter or "combined"
+            })
+    
+    return JSONResponse({"error": "Invalid chart type"}, status_code=400)
+
+@app.get("/api/dashboard-recent-activities")
+def dashboard_recent_activities(current_user: str = Depends(get_current_user),
+                               limit: int = 10,
+                               survey_type_filter: Optional[str] = None):
+    """Son aktiviteler listesi - anket türü filtreleme eklendi"""
+    
+    where_conditions = []
+    params = {}
+    
+    if not auth_manager.is_super_user(current_user):
+        where_conditions.append("e.manager_name = :current_user")
+        params["current_user"] = current_user
+    
+    if survey_type_filter and survey_type_filter in SURVEY_TYPES:
+        where_conditions.append("COALESCE(e.survey_type, 'eczane') = :survey_type_filter")
+        params["survey_type_filter"] = survey_type_filter
+    
+    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+    
+    with engine.begin() as conn:
+        activities = conn.execute(text(f"""
+            SELECT 
+                e.id,
+                e.created_at,
+                e.rep_name,
+                e.pharmacy_name,
+                e.doctor_name,
+                e.brick_name,
+                COALESCE(e.survey_type, 'eczane') as survey_type,
+                e.percentage,
+                CASE 
+                    WHEN e.percentage >= 90 THEN 'Mükemmel'
+                    WHEN e.percentage >= 80 THEN 'Çok İyi'
+                    WHEN e.percentage >= 70 THEN 'İyi'
+                    ELSE 'Gelişmeli'
+                END as status
+            FROM evaluations e
+            WHERE {where_clause}
+            ORDER BY e.created_at DESC
+            LIMIT :limit
+        """), {**params, "limit": limit}).mappings().all()
+    
+    return JSONResponse([{
+        "id": row["id"],
+        "date": row["created_at"][:16].replace('T', ' '),
+        "rep_name": row["rep_name"],
+        "target_name": row["pharmacy_name"] if row["survey_type"] == "eczane" else row["doctor_name"],
+        "target_type": "Eczane" if row["survey_type"] == "eczane" else "Doktor",
+        "brick_name": row["brick_name"] or "-",
+        "percentage": round(row["percentage"], 0),
+        "status": row["status"],
+        "survey_type": row["survey_type"]
+    } for row in activities])
 
 # --------------------------- AUTH ROUTES ---------------------------
 
@@ -1088,14 +1469,12 @@ async def login_submit(request: Request,
     
     print(f"LOGIN ATTEMPT: Manager='{manager_name}', Password={'*'*len(password) if password else 'None'}")
     
-    # Form validation - boş değerler kontrolü
     if not manager_name or not manager_name.strip():
         print("LOGIN FAILED: Empty manager name")
         return RedirectResponse(url="/login?error=Lütfen bir bölge müdürü seçin", status_code=303)
     
     manager_name = manager_name.strip()
     
-    # Şifre sistemi aktifse şifre kontrolü yap
     if auth_manager.passwords:
         if not password or not password.strip():
             print("LOGIN FAILED: Password required but not provided")
@@ -1107,7 +1486,6 @@ async def login_submit(request: Request,
             if auth_manager.authenticate_manager(manager_name, password):
                 print(f"LOGIN SUCCESS: {manager_name}")
                 response = RedirectResponse(url="/", status_code=303)
-                # URL encoding ile Türkçe karakter desteği
                 encoded_name = urllib.parse.quote(manager_name, safe='')
                 response.set_cookie("session_user", encoded_name, 
                                   httponly=True, max_age=3600*8, 
@@ -1115,7 +1493,6 @@ async def login_submit(request: Request,
                 return response
             else:
                 print(f"LOGIN FAILED: Invalid credentials for {manager_name}")
-                # Hata mesajını URL encode et
                 error_msg = urllib.parse.quote("Geçersiz kullanıcı adı veya şifre")
                 return RedirectResponse(url=f"/login?error={error_msg}", status_code=303)
                 
@@ -1124,13 +1501,11 @@ async def login_submit(request: Request,
             error_msg = urllib.parse.quote("Giriş işlemi sırasında hata oluştu")
             return RedirectResponse(url=f"/login?error={error_msg}", status_code=303)
     
-    # Şifre sistemi aktif değilse eski sistem
     else:
         try:
             if auth_manager.authenticate_manager(manager_name):
                 print(f"LOGIN SUCCESS (no password system): {manager_name}")
                 response = RedirectResponse(url="/", status_code=303)
-                # URL encoding ile Türkçe karakter desteği
                 encoded_name = urllib.parse.quote(manager_name, safe='')
                 response.set_cookie("session_user", encoded_name, 
                                   httponly=True, max_age=3600*8,
@@ -1146,7 +1521,6 @@ async def login_submit(request: Request,
             error_msg = urllib.parse.quote("Giriş işlemi sırasında hata oluştu")
             return RedirectResponse(url=f"/login?error={error_msg}", status_code=303)
 
-# --- Şifre Yönetimi Route'ları ---
 @app.get("/change-password")
 def change_password_form(request: Request):
     current_user = request.query_params.get("manager", "")
@@ -1163,12 +1537,10 @@ def change_password_post(
     new_password: str = Form(...),
     confirm_password: str = Form(...)
 ):
-    # Şifre eşleşme kontrolü
     if new_password != confirm_password:
         error_msg = "Şifreler eşleşmiyor"
         return RedirectResponse(url=f"/change-password?manager={current_user}&error={urllib.parse.quote(error_msg)}", status_code=303)
     
-    # Şifre değiştirme
     if not auth_manager.change_password(current_user, old_password, new_password):
         error_msg = "Mevcut şifre yanlış"
         return RedirectResponse(url=f"/change-password?manager={current_user}&error={urllib.parse.quote(error_msg)}", status_code=303)
@@ -1194,7 +1566,6 @@ def forgot_password_request_post(request: Request, manager_name: str = Form(...)
         error_msg = urllib.parse.quote(result["error"])
         return RedirectResponse(url=f"/forgot-password?error={error_msg}", status_code=303)
     
-    # Başarılı - kod oluşturuldu
     return templates.TemplateResponse(
         "forgot_password.html",
         {
@@ -1214,7 +1585,6 @@ def forgot_password_reset_post(
     new_password: str = Form(...),
     confirm_password: str = Form(...)
 ):
-    # Şifre eşleşme kontrolü
     if new_password != confirm_password:
         return templates.TemplateResponse(
             "forgot_password.html",
@@ -1226,7 +1596,6 @@ def forgot_password_reset_post(
             }
         )
     
-    # Şifre sıfırlama
     if not auth_manager.reset_password_with_code(manager_name, temp_code, new_password):
         return templates.TemplateResponse(
             "forgot_password.html", 
@@ -1255,7 +1624,6 @@ def form_page(request: Request, session_user: Optional[str] = Cookie(None)):
         print("FORM PAGE: No session cookie, redirecting to login")
         return RedirectResponse(url="/login", status_code=303)
     
-    # URL decode
     try:
         decoded_name = urllib.parse.unquote(session_user)
         print(f"FORM PAGE: Decoded user = '{decoded_name}'")
@@ -1263,9 +1631,8 @@ def form_page(request: Request, session_user: Optional[str] = Cookie(None)):
         decoded_name = session_user
         print(f"FORM PAGE: Could not decode, using = '{decoded_name}'")
     
-    # DÜZELTME: Tüm manager listesinden kontrol et (sadece şifresi olanlar değil)
     all_managers = LOOKUPS.get('managers', [])
-    if decoded_name not in all_managers:
+    if decoded_name not in all_managers and not auth_manager.is_super_user(decoded_name):
         print(f"FORM PAGE: User '{decoded_name}' not in all managers: {all_managers}")
         response = RedirectResponse(url="/login", status_code=303)
         response.delete_cookie("session_user")
@@ -1273,44 +1640,157 @@ def form_page(request: Request, session_user: Optional[str] = Cookie(None)):
     
     print(f"FORM PAGE: User '{decoded_name}' is valid, showing form")
     
-    with engine.begin() as conn:
-        rows = conn.execute(text(
-            "SELECT id, text, weight, COALESCE(category,'') AS category FROM questions ORDER BY category, id"
-        )).mappings().all()
-    
     user_lookups = auth_manager.get_user_specific_lookups(decoded_name)
+    
+    # Kullanıcının bölgesini belirle
+    user_region = ""
+    if auth_manager.is_super_user(decoded_name):
+        user_region = "Tüm Bölgeler"
+    else:
+        user_regions = user_lookups.get("regions", [])
+        if user_regions:
+            user_region = user_regions[0]  # İlk bölgeyi varsayılan yap
     
     return templates.TemplateResponse("index.html", {
         "request": request, 
-        "questions": rows,
         "current_user": decoded_name,
-        "has_passwords": bool(auth_manager.passwords),  # YENİ: Şifre sistemi aktif mi?
+        "user_region": user_region,  # Bu satır eksikti
+        "has_passwords": bool(auth_manager.passwords),
+        "survey_types": SURVEY_TYPES,
         **user_lookups
     })
+
+@app.get("/api/dashboard-recent-activities")
+def dashboard_recent_activities(current_user: str = Depends(get_current_user),
+                               limit: int = 10,
+                               survey_type_filter: Optional[str] = None):
+    """Son aktiviteler listesi - düzeltilmiş versiyon"""
+    
+    where_conditions = []
+    params = {}
+    
+    if not auth_manager.is_super_user(current_user):
+        where_conditions.append("e.manager_name = :current_user")
+        params["current_user"] = current_user
+    
+    if survey_type_filter and survey_type_filter in SURVEY_TYPES:
+        where_conditions.append("COALESCE(e.survey_type, 'eczane') = :survey_type_filter")
+        params["survey_type_filter"] = survey_type_filter
+    
+    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+    
+    with engine.begin() as conn:
+        activities = conn.execute(text(f"""
+            SELECT 
+                e.id,
+                e.created_at,
+                e.rep_name,
+                e.pharmacy_name,
+                e.doctor_name,
+                e.brick_name,
+                COALESCE(e.survey_type, 'eczane') as survey_type,
+                e.percentage,
+                CASE 
+                    WHEN e.percentage >= 90 THEN 'Mükemmel'
+                    WHEN e.percentage >= 80 THEN 'Çok İyi'
+                    WHEN e.percentage >= 70 THEN 'İyi'
+                    ELSE 'Gelişmeli'
+                END as status
+            FROM evaluations e
+            WHERE {where_clause}
+            ORDER BY e.created_at DESC
+            LIMIT :limit
+        """), {**params, "limit": limit}).mappings().all()
+    
+    return JSONResponse([{
+        "id": row["id"],
+        "date": row["created_at"][:16].replace('T', ' ') if row["created_at"] else "",
+        "rep_name": row["rep_name"],
+        "target_name": row["pharmacy_name"] if row["survey_type"] == "eczane" else row["doctor_name"],
+        "target_type": "Eczane" if row["survey_type"] == "eczane" else "Doktor",
+        "brick_name": row["brick_name"] or "-",
+        "percentage": round(row["percentage"], 0) if row["percentage"] else 0,
+        "status": row["status"],
+        "survey_type": row["survey_type"]
+    } for row in activities])
+
+@app.get("/api/dashboard-top-performers")
+def dashboard_top_performers(current_user: str = Depends(get_current_user),
+                           time_range: int = 30,
+                           rep_filter: Optional[str] = None,
+                           brick_filter: Optional[str] = None,
+                           survey_type_filter: Optional[str] = None,
+                           limit: int = 10):
+    """En iyi performans gösteren temsilciler"""
+    
+    end_date = date.today()
+    start_date = end_date - timedelta(days=time_range)
+    
+    where_conditions = [f"{sql_date_cast('e.created_at')} BETWEEN :start_date AND :end_date"]
+    params = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()}
+    
+    if not auth_manager.is_super_user(current_user):
+        where_conditions.append("e.manager_name = :current_user")
+        params["current_user"] = current_user
+    
+    if rep_filter and rep_filter.strip():
+        where_conditions.append("e.rep_name = :rep_filter")
+        params["rep_filter"] = rep_filter.strip()
+    
+    if brick_filter and brick_filter.strip():
+        where_conditions.append("e.brick_name = :brick_filter")
+        params["brick_filter"] = brick_filter.strip()
+    
+    if survey_type_filter and survey_type_filter in SURVEY_TYPES:
+        where_conditions.append("COALESCE(e.survey_type, 'eczane') = :survey_type_filter")
+        params["survey_type_filter"] = survey_type_filter
+    
+    where_clause = " AND ".join(where_conditions)
+    
+    with engine.begin() as conn:
+        performers = conn.execute(text(f"""
+            SELECT 
+                e.rep_name,
+                COALESCE(e.survey_type, 'eczane') as survey_type,
+                COUNT(*) as evaluation_count,
+                AVG(e.percentage) as avg_performance,
+                MAX(e.created_at) as last_evaluation
+            FROM evaluations e
+            WHERE {where_clause}
+            GROUP BY e.rep_name, COALESCE(e.survey_type, 'eczane')
+            HAVING COUNT(*) >= 2
+            ORDER BY avg_performance DESC, evaluation_count DESC
+            LIMIT :limit
+        """), {**params, "limit": limit}).mappings().all()
+    
+    return JSONResponse([{
+        "rep_name": row["rep_name"],
+        "survey_type": row["survey_type"],
+        "evaluation_count": int(row["evaluation_count"]),
+        "avg_performance": round(row["avg_performance"], 1),
+        "last_evaluation": row["last_evaluation"][:10] if row["last_evaluation"] else None
+    } for row in performers])
 
 @app.get("/evaluations", response_class=HTMLResponse)
 def evaluations_page(request: Request, 
                     current_user: str = Depends(get_current_user),
                     q: Optional[str] = None,
                     date_from: Optional[str] = None, 
-                    date_to: Optional[str] = None):
-    """Değerlendirme kayıtları sayfası"""
+                    date_to: Optional[str] = None,
+                    survey_type_filter: Optional[str] = None):
+    """Değerlendirme kayıtları sayfası - anket türü filtreleme eklendi"""
     
-    # Tarih filtresi varsayılanları
     if not date_from and not date_to:
         date_to = date.today().isoformat()
         date_from = (date.today() - timedelta(days=30)).isoformat()
     
-    # Base query
     where_conditions = []
     params = {}
     
-    # Süper kullanıcı değilse sadece kendi kayıtlarını göster
     if not auth_manager.is_super_user(current_user):
         where_conditions.append("e.manager_name = :current_user")
         params["current_user"] = current_user
     
-    # Tarih filtreleri
     if date_from:
         where_conditions.append(f"{sql_date_cast('e.created_at')} >= :date_from")
         params["date_from"] = date_from
@@ -1318,24 +1798,28 @@ def evaluations_page(request: Request,
         where_conditions.append(f"{sql_date_cast('e.created_at')} <= :date_to")
         params["date_to"] = date_to
     
-    # Metin arama
+    if survey_type_filter and survey_type_filter in SURVEY_TYPES:
+        where_conditions.append("COALESCE(e.survey_type, 'eczane') = :survey_type_filter")
+        params["survey_type_filter"] = survey_type_filter
+    
     if q and q.strip():
         search_term = f"%{q.strip()}%"
         where_conditions.append("""
             (e.manager_name LIKE :search OR 
              e.rep_name LIKE :search OR 
              e.region_name LIKE :search OR 
-             e.pharmacy_name LIKE :search)
+             e.pharmacy_name LIKE :search OR
+             e.doctor_name LIKE :search)
         """)
         params["search"] = search_term
     
     where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
     
-    # Sorguyu çalıştır
     with engine.begin() as conn:
         evaluations = conn.execute(text(f"""
             SELECT e.id, e.created_at, e.manager_name, e.rep_name, 
-                   e.region_name, e.brick_name, e.pharmacy_name, 
+                   e.region_name, e.brick_name, e.pharmacy_name, e.doctor_name,
+                   COALESCE(e.survey_type, 'eczane') as survey_type,
                    e.total_score, e.max_score, e.percentage, e.notes
             FROM evaluations e
             WHERE {where_clause}
@@ -1347,7 +1831,8 @@ def evaluations_page(request: Request,
         "request": request,
         "evaluations": evaluations,
         "current_user": current_user,
-        "is_super_user": auth_manager.is_super_user(current_user)
+        "is_super_user": auth_manager.is_super_user(current_user),
+        "survey_types": SURVEY_TYPES
     })
 
 @app.get("/evaluation/{eval_id}", response_class=HTMLResponse)
@@ -1356,16 +1841,15 @@ def evaluation_detail(eval_id: int, request: Request,
     """Değerlendirme detay sayfası"""
     
     with engine.begin() as conn:
-        # Evaluation bilgilerini al
         eval_query = """
             SELECT e.id, e.created_at, e.manager_name, e.rep_name, 
-                   e.region_name, e.brick_name, e.pharmacy_name,
+                   e.region_name, e.brick_name, e.pharmacy_name, e.doctor_name,
+                   COALESCE(e.survey_type, 'eczane') as survey_type,
                    e.total_score, e.max_score, e.percentage, e.notes
             FROM evaluations e 
             WHERE e.id = :eval_id
         """
         
-        # Süper kullanıcı değilse sadece kendi kayıtlarını görebilir
         if not auth_manager.is_super_user(current_user):
             eval_query += " AND e.manager_name = :current_user"
         
@@ -1377,7 +1861,6 @@ def evaluation_detail(eval_id: int, request: Request,
         if not evaluation:
             raise HTTPException(status_code=404, detail="Evaluation not found")
         
-        # Cevapları al
         answers = conn.execute(text("""
             SELECT a.question_id, a.question_text, a.answer, a.weight, a.score
             FROM answers a
@@ -1389,18 +1872,17 @@ def evaluation_detail(eval_id: int, request: Request,
         "request": request,
         "eval": evaluation,
         "answers": answers,
-        "current_user": current_user
+        "current_user": current_user,
+        "survey_types": SURVEY_TYPES
     })
 
 @app.get("/reports", response_class=HTMLResponse)
 def reports_page(request: Request, current_user: str = Depends(get_current_user)):
     
     if auth_manager.is_super_user(current_user):
-        # Süper kullanıcıysa tüm verileri göster
         user_lookups = LOOKUPS.copy()
         mgr_to_reps = {}
         
-        # DÜZELTME: Tüm müdürler için temsilcileri hesapla
         region_to_reps = LOOKUPS.get("region_to_reps", {})
         
         for mgr in LOOKUPS.get("managers", []):
@@ -1410,16 +1892,12 @@ def reports_page(request: Request, current_user: str = Depends(get_current_user)
                 mgr_reps.extend(region_to_reps.get(region, []))
             mgr_to_reps[mgr] = sorted(list(set(mgr_reps)))
         
-        # Süper kullanıcının kendisini de ekle ve tüm temsilcileri ver
         all_reps = []
         for reps_list in region_to_reps.values():
             all_reps.extend(reps_list)
         mgr_to_reps[current_user] = sorted(list(set(all_reps)))
         
-        print(f"Süper kullanıcı {current_user} - mgr_to_reps: {mgr_to_reps}")
-        
     else:
-        # Normal kullanıcı
         user_lookups = auth_manager.get_user_specific_lookups(current_user)
         mgr_to_reps = {current_user: user_lookups["reps"]}
     
@@ -1429,8 +1907,22 @@ def reports_page(request: Request, current_user: str = Depends(get_current_user)
         "current_manager": current_user,
         "managers": user_lookups["managers"],
         "mgr_to_reps": mgr_to_reps,
-        "radar_order": CATS_ORDER,
+        "radar_order": CATS_ORDER,  # Backward compatibility
+        "survey_types": SURVEY_TYPES,
         "is_super_user": auth_manager.is_super_user(current_user)
+    })
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page(request: Request, current_user: str = Depends(get_current_user)):
+    """Dashboard sayfası"""
+    user_email = auth_manager.get_user_email(current_user)
+    
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "current_user": current_user,
+        "user_email": user_email,
+        "is_super_user": auth_manager.is_super_user(current_user),
+        "survey_types": SURVEY_TYPES
     })
 
 # --------------------------- FORM SUBMISSION ---------------------------
@@ -1439,20 +1931,41 @@ def reports_page(request: Request, current_user: str = Depends(get_current_user)
 async def submit_form(
     request: Request,
     current_user: str = Depends(get_current_user),
+    survey_type: str = Form(...),
     rep_name: str = Form(...),
     region_name: Optional[str] = Form(None),
     brick_name: Optional[str] = Form(None),
     pharmacy_name: Optional[str] = Form(None),
+    doctor_name: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
 ):
-    form = await request.form()
-    with engine.begin() as conn:
-        qs = conn.execute(text("SELECT id, text, weight FROM questions ORDER BY id")).mappings().all()
+    """Form gönderimi - anket türü desteği eklendi"""
     
+    # Survey type validation
+    if survey_type not in SURVEY_TYPES:
+        return RedirectResponse(url="/?error=Geçersiz anket türü", status_code=303)
+    
+    # Doktor anketi için doktor adı zorunlu
+    if survey_type == "doktor":
+        if not doctor_name or not doctor_name.strip():
+            return RedirectResponse(url="/?error=Doktor anketi için doktor adı gereklidir", status_code=303)
+    
+    form = await request.form()
+    
+    # Bu anket türü için soruları al
+    with engine.begin() as conn:
+        qs = conn.execute(text("""
+            SELECT id, text, weight 
+            FROM questions 
+            WHERE COALESCE(survey_type, 'eczane') = :survey_type
+            ORDER BY id
+        """), {"survey_type": survey_type}).mappings().all()
+    
+    # Tüm sorular cevaplandı mı kontrol et
     for q in qs:
         answer_field = f"answer_{q['id']}"
         if form.get(answer_field) is None:
-            return RedirectResponse(url="/", status_code=303)
+            return RedirectResponse(url=f"/?error=Tüm soruları cevaplayın&survey_type={survey_type}", status_code=303)
 
     total = 0.0
     max_total = 0.0
@@ -1477,12 +1990,23 @@ async def submit_form(
 
     pct = (total / max_total * 100.0) if max_total > 0 else 0.0
     
+    # Doktor anketi için not oluştur
+    final_notes = (notes or "").strip()
+    if survey_type == "doktor" and doctor_name and doctor_name.strip():
+        doctor_note = f"Doktor: {doctor_name.strip()}"
+        if final_notes:
+            final_notes = f"{doctor_note}\n{final_notes}"
+        else:
+            final_notes = doctor_note
+    
     try:
         with engine.begin() as conn:
             result = conn.execute(text("""
-                INSERT INTO evaluations(created_at, manager_name, rep_name, region_name, brick_name, pharmacy_name,
+                INSERT INTO evaluations(created_at, manager_name, rep_name, region_name, brick_name, 
+                                        pharmacy_name, doctor_name, survey_type,
                                         total_score, max_score, percentage, notes)
-                VALUES (:created_at,:manager,:rep,:region,:brick,:pharmacy,:total,:max,:pct,:notes)
+                VALUES (:created_at,:manager,:rep,:region,:brick,:pharmacy,:doctor,:survey_type,
+                        :total,:max,:pct,:notes)
             """), {
                 "created_at": datetime.utcnow().isoformat(timespec="seconds"),
                 "manager": current_user,
@@ -1490,10 +2014,12 @@ async def submit_form(
                 "region": (region_name or "").strip() or None,
                 "brick": (brick_name or "").strip() or None,
                 "pharmacy": (pharmacy_name or "").strip() or None,
+                "doctor": (doctor_name or "").strip() if survey_type == "doktor" else None,
+                "survey_type": survey_type,
                 "total": total, 
                 "max": max_total, 
                 "pct": pct, 
-                "notes": (notes or "").strip() or None,
+                "notes": final_notes or None,
             })
             
             eval_id = result.lastrowid
@@ -1515,7 +2041,8 @@ async def submit_form(
         
     except Exception as e:
         print(f"Submit hatası: {str(e)}")
-        return RedirectResponse(url="/", status_code=303)
+        error_msg = urllib.parse.quote("Form gönderiminde hata oluştu")
+        return RedirectResponse(url=f"/?error={error_msg}&survey_type={survey_type}", status_code=303)
 
 # --------------------------- DEBUG ENDPOINTS ---------------------------
 
@@ -1524,18 +2051,19 @@ def debug_questions_detail():
     """Soruların kategori detaylarını göster"""
     with engine.begin() as conn:
         questions = conn.execute(text("""
-            SELECT id, text, weight, category 
+            SELECT id, text, weight, category, COALESCE(survey_type, 'eczane') as survey_type
             FROM questions 
-            ORDER BY id
+            ORDER BY survey_type, id
         """)).mappings().all()
         
         parsed_questions = []
         for q in questions:
-            cats = parse_category_tags(q["category"])
+            cats = parse_category_tags(q["category"], q["survey_type"])
             parsed_questions.append({
                 "id": q["id"],
                 "text": q["text"][:50] + "...",
                 "weight": q["weight"],
+                "survey_type": q["survey_type"],
                 "raw_category": q["category"],
                 "parsed_categories": cats
             })
@@ -1543,24 +2071,28 @@ def debug_questions_detail():
         return JSONResponse({
             "questions_count": len(questions),
             "questions": parsed_questions,
-            "expected_categories": CATS_ORDER
+            "survey_types": SURVEY_TYPES,
+            "eczane_categories": get_survey_categories("eczane"),
+            "doktor_categories": get_survey_categories("doktor")
         })
 
 @app.get("/debug/check")
 def debug_check():
     with engine.begin() as conn:
         evals = conn.execute(text("""
-            SELECT id, rep_name, manager_name, created_at, total_score
+            SELECT id, rep_name, manager_name, created_at, total_score, 
+                   COALESCE(survey_type, 'eczane') as survey_type,
+                   pharmacy_name, doctor_name
             FROM evaluations 
             ORDER BY id DESC
             LIMIT 10
         """)).mappings().all()
         
         questions = conn.execute(text("""
-            SELECT id, text, weight, category 
+            SELECT id, text, weight, category, COALESCE(survey_type, 'eczane') as survey_type
             FROM questions 
-            ORDER BY id
-            LIMIT 5
+            ORDER BY survey_type, id
+            LIMIT 10
         """)).mappings().all()
         
         return JSONResponse({
@@ -1568,7 +2100,8 @@ def debug_check():
             "recent_evaluations": [dict(e) for e in evals],
             "questions_count": len(questions),  
             "sample_questions": [dict(q) for q in questions],
-            "available_managers": LOOKUPS.get("managers", [])
+            "available_managers": LOOKUPS.get("managers", []),
+            "survey_types": SURVEY_TYPES
         })
 
 # --------------------------- MAIN ENTRY POINT ---------------------------

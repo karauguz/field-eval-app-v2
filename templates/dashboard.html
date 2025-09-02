@@ -1,0 +1,1066 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="dashboard-container">
+    <!-- Header -->
+    <div class="dashboard-header">
+        <div>
+            <h1 class="dashboard-title">Opella Dashboard</h1>
+            <p class="dashboard-subtitle">
+    Hoş geldin, <strong>{{ current_user }}</strong> - 
+    {% if user_email %}
+        {{ user_email }}
+    {% else %}
+        Saha Gözlem Sistemi
+    {% endif %}
+</p>
+        </div>
+        <div class="dashboard-actions">
+            <a href="/" class="btn btn-primary">+ Yeni Değerlendirme</a>
+        </div>
+    </div>
+
+    <!-- Filtreler -->
+    <div class="filters-container">
+        <div class="filter-group">
+            <label class="filter-label">Anket Türü</label>
+            <select id="surveyTypeFilter">
+                <option value="eczane">Eczane</option>
+                <option value="doktor">Doktor</option>
+                <option value="">Tümü</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Zaman Aralığı</label>
+            <select id="timeRange">
+                <option value="7">Son 7 gün</option>
+                <option value="30" selected>Son 30 gün</option>
+                <option value="90">Son 3 ay</option>
+                <option value="365">Son 1 yıl</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Temsilci</label>
+            <select id="repFilter">
+                <option value="">Tüm temsilciler</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Brick</label>
+            <select id="brickFilter">
+                <option value="">Tüm brick'ler</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Ana İstatistik Kartları -->
+    <div class="stats-grid">
+        <div class="stat-card primary">
+            <div class="stat-value" id="totalEvaluations">-</div>
+            <div class="stat-label">Toplam Değerlendirme</div>
+        </div>
+        
+        <div class="stat-card success">
+            <div class="stat-value" id="activeReps">-</div>
+            <div class="stat-label">Aktif Temsilci</div>
+        </div>
+        
+        <div class="stat-card warning">
+            <div class="stat-value" id="avgPerformance">-</div>
+            <div class="stat-label">Ortalama Performans</div>
+        </div>
+        
+        <div class="stat-card danger">
+            <div class="stat-value" id="activePharmacies">-</div>
+            <div class="stat-label">Farklı Ziyaret</div>
+        </div>
+    </div>
+
+    <!-- Grafikler -->
+    <div class="charts-grid">
+        <div class="chart-card">
+            <h3 class="chart-title">Performans Trendi</h3>
+            <div class="chart-container">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3 class="chart-title">Kategori Performansı</h3>
+            <div class="chart-subtitle" id="categorySubtitle">Eczane Anketi</div>
+            <div class="chart-container">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alt Bölümler -->
+    <div class="bottom-grid">
+        <!-- Top Performers -->
+        <div class="data-card">
+            <h3 class="card-title">En İyi Performans</h3>
+            <div id="topPerformers" class="performers-list">
+                <p style="color: var(--gray-600); text-align: center; padding: 20px;">Yükleniyor...</p>
+            </div>
+        </div>
+        
+        <!-- Son Aktiviteler -->
+        <div class="data-card">
+            <h3 class="card-title">Son Değerlendirmeler</h3>
+            <div id="recentActivities" class="activities-list">
+                <p style="color: var(--gray-600); text-align: center; padding: 20px;">Yükleniyor...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+:root {
+    --primary: #185C26;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --border: #e5e7eb;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-900: #111827;
+    --hover-color: #185C26; 
+}
+
+.dashboard-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.dashboard-header {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.dashboard-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin: 0;
+}
+
+.dashboard-subtitle {
+    color: var(--gray-600);
+    margin: 4px 0 0 0;
+    font-size: 14px;
+}
+
+.dashboard-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #13491e;
+}
+
+.btn-outline {
+    background: transparent;
+    color: var(--gray-600);
+    border: 1px solid var(--border);
+}
+
+.btn-outline:hover {
+    background: var(--gray-50);
+}
+
+.filters-container {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 150px;
+}
+
+.filter-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+select {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    color: var(--gray-900);
+    cursor: pointer;
+}
+
+select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--primary);
+}
+
+.stat-card.success::before { background: var(--success); }
+.stat-card.warning::before { background: var(--warning); }
+.stat-card.danger::before { background: var(--danger); }
+
+.stat-value {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--gray-900);
+    margin-bottom: 8px;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: var(--gray-600);
+    font-weight: 500;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.chart-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.chart-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--gray-900);
+}
+
+.chart-subtitle {
+    font-size: 12px;
+    color: var(--gray-600);
+    margin-bottom: 16px;
+    font-style: italic;
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+.bottom-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 24px;
+}
+
+.data-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: var(--gray-900);
+}
+
+.performers-list,
+.activities-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.performer-item,
+.activity-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.performer-item:last-child,
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.performer-name,
+.activity-rep {
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+.performer-score,
+.activity-score {
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.badge-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.badge-danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Loading state */
+.loading-placeholder {
+    color: var(--gray-600);
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .dashboard-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+    
+    .dashboard-actions {
+        justify-content: center;
+    }
+    
+    .filters-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .bottom-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-container {
+        height: 250px;
+    }
+}
+
+@media (max-width: 480px) {
+    .dashboard-container {
+        padding: 0 10px;
+    }
+    
+    .dashboard-header,
+    .filters-container,
+    .chart-card,
+    .data-card {
+        padding: 16px;
+    }
+    
+    .dashboard-title {
+        font-size: 24px;
+    }
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+// Dashboard JavaScript - Tam ve çalışır versiyon
+console.log('Dashboard initializing...');
+
+let performanceChart = null;
+let categoryChart = null;
+let categoryMethod = 'traditional';
+
+// Filtre değişkenleri 
+const filters = {
+    time_range: 30,
+    rep_filter: '',
+    brick_filter: '',
+    survey_type_filter: ''
+};
+
+// DOM elementleri - güvenli erişim
+const elements = {
+    timeRange: document.getElementById('timeRange'),
+    repFilter: document.getElementById('repFilter'),
+    brickFilter: document.getElementById('brickFilter'),
+    surveyTypeFilter: document.getElementById('surveyTypeFilter'),
+    totalEvaluations: document.getElementById('totalEvaluations'),
+    activeReps: document.getElementById('activeReps'),
+    avgPerformance: document.getElementById('avgPerformance'),
+    activePharmacies: document.getElementById('activePharmacies'),
+    topPerformers: document.getElementById('topPerformers'),
+    recentActivities: document.getElementById('recentActivities'),
+    categorySubtitle: document.getElementById('categorySubtitle')
+};
+
+// Güvenli element kontrol fonksiyonları
+function safeSetText(element, text) {
+    if (element) {
+        element.textContent = text;
+    }
+}
+
+function safeSetHTML(element, html) {
+    if (element) {
+        element.innerHTML = html;
+    }
+}
+
+// Utility functions
+function getBadgeClass(percentage) {
+    const perf = Number(percentage) || 0;
+    if (perf >= 85) return 'success';
+    if (perf >= 70) return 'warning';
+    return 'danger';
+}
+
+function getStatusText(percentage) {
+    const perf = Number(percentage) || 0;
+    if (perf >= 90) return 'Mükemmel';
+    if (perf >= 80) return 'Çok İyi';
+    if (perf >= 70) return 'İyi';
+    return 'Gelişmeli';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showError(message) {
+    console.error('Dashboard Error:', message);
+    if (typeof toastr !== 'undefined') {
+        toastr.error(message);
+    } else {
+        console.log('Error:', message);
+    }
+}
+
+// Dashboard yükleme
+document.addEventListener('DOMContentLoaded', () => {
+    initializeDashboard();
+});
+
+async function initializeDashboard() {
+    try {
+        console.log('Starting dashboard initialization...');
+        
+        // Chart.js kontrolü
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js library not loaded!');
+            showError('Grafik kütüphanesi yüklenemedi. Sayfayı yenilemeyi deneyin.');
+            return;
+        }
+        
+        await populateFilters();
+        setupEventListeners();
+        updateCategorySubtitle(); // İlk başta güncelle
+        await loadDashboard();
+        
+        console.log('Dashboard initialized successfully');
+    } catch (error) {
+        console.error('Dashboard initialization failed:', error);
+        showError('Dashboard yüklenirken hata oluştu');
+    }
+}
+
+async function populateFilters() {
+    try {
+        console.log('Populating filters...');
+        const response = await fetch('/lookups');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Lookups loaded:', data);
+        
+        // Temsilciler
+        if (elements.repFilter && data.reps) {
+            elements.repFilter.innerHTML = '<option value="">Tüm temsilciler</option>';
+            data.reps.forEach(rep => {
+                const option = document.createElement('option');
+                option.value = rep;
+                option.textContent = rep;
+                elements.repFilter.appendChild(option);
+            });
+            console.log(`${data.reps.length} rep loaded`);
+        }
+        
+        // Brick'ler
+        if (elements.brickFilter && data.bricks) {
+            elements.brickFilter.innerHTML = '<option value="">Tüm brick\'ler</option>';
+            data.bricks.forEach(brick => {
+                const option = document.createElement('option');
+                option.value = brick;
+                option.textContent = brick;
+                elements.brickFilter.appendChild(option);
+            });
+            console.log(`${data.bricks.length} bricks loaded`);
+        }
+        
+        console.log('Filters populated successfully');
+    } catch (error) {
+        console.error('Error populating filters:', error);
+    }
+}
+
+function setupEventListeners() {
+    console.log('Setting up event listeners...');
+    
+    // Survey type filter
+    if (elements.surveyTypeFilter) {
+        elements.surveyTypeFilter.addEventListener('change', (e) => {
+            const newValue = e.target.value;
+            console.log('Survey type changed from', filters.survey_type_filter, 'to', newValue);
+            filters.survey_type_filter = newValue;
+            updateCategorySubtitle();
+            loadDashboard();
+        });
+    }
+    
+    // Time range filter
+    if (elements.timeRange) {
+        elements.timeRange.addEventListener('change', (e) => {
+            const newValue = parseInt(e.target.value);
+            console.log('Time range changed to:', newValue);
+            filters.time_range = newValue;
+            loadDashboard();
+        });
+    }
+    
+    // Rep filter
+    if (elements.repFilter) {
+        elements.repFilter.addEventListener('change', (e) => {
+            console.log('Rep filter changed to:', e.target.value);
+            filters.rep_filter = e.target.value;
+            loadDashboard();
+        });
+    }
+    
+    // Brick filter
+    if (elements.brickFilter) {
+        elements.brickFilter.addEventListener('change', (e) => {
+            console.log('Brick filter changed to:', e.target.value);
+            filters.brick_filter = e.target.value;
+            loadDashboard();
+        });
+    }
+    
+    console.log('Event listeners set up successfully');
+}
+
+// Kategori alt başlığını güncelle
+function updateCategorySubtitle() {
+    if (!elements.categorySubtitle) return;
+    
+    const surveyTypeNames = {
+        'eczane': 'Eczane Anketi',
+        'doktor': 'Doktor Anketi', 
+        '': 'Tüm Anketler (Birleşik)'  // Bu güncellendi
+    };
+    
+    const subtitle = surveyTypeNames[filters.survey_type_filter] || 'Tüm Anketler (Birleşik)';
+    elements.categorySubtitle.textContent = subtitle;
+    console.log('Category subtitle updated to:', subtitle);
+}
+
+async function loadDashboard() {
+    console.log('=== LOADING DASHBOARD ===');
+    console.log('Current filters:', filters);
+    
+    try {
+        // Paralel olarak yükle
+        await Promise.all([
+            loadStats(),
+            loadCharts(),
+            loadRecentActivities(),
+            loadTopPerformers()
+        ]);
+        
+        console.log('=== DASHBOARD LOADING COMPLETE ===');
+        
+    } catch (error) {
+        console.error('Dashboard loading error:', error);
+        showError('Dashboard verileri yüklenirken hata oluştu');
+    }
+}
+
+async function loadStats() {
+    const params = new URLSearchParams();
+    params.append('time_range', filters.time_range.toString());
+    
+    if (filters.rep_filter && filters.rep_filter.trim()) {
+        params.append('rep_filter', filters.rep_filter);
+    }
+    if (filters.brick_filter && filters.brick_filter.trim()) {
+        params.append('brick_filter', filters.brick_filter);
+    }
+    if (filters.survey_type_filter && filters.survey_type_filter.trim()) {
+        params.append('survey_type_filter', filters.survey_type_filter);
+    }
+    
+    const url = `/api/dashboard-stats?${params.toString()}`;
+    console.log('Loading stats from:', url);
+    
+    try {
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Stats loaded successfully:', data);
+        
+        updateStats(data);
+        
+    } catch (error) {
+        console.error('Stats loading error:', error);
+        // Default değerler göster
+        updateStats({
+            total_evaluations: 0,
+            active_reps: 0,
+            active_targets: 0,
+            avg_performance: 0
+        });
+    }
+}
+
+async function loadCharts() {
+    console.log('Loading charts...');
+    
+    try {
+        // Performans grafiği
+        await loadPerformanceChart();
+        
+        // Kategori grafiği  
+        await loadCategoryChart();
+        
+        console.log('Charts loaded successfully');
+    } catch (error) {
+        console.error('Charts loading error:', error);
+    }
+}
+
+async function loadPerformanceChart() {
+    const params = new URLSearchParams();
+    params.append('chart_type', 'performance_trend');
+    params.append('time_range', filters.time_range.toString());
+    
+    if (filters.rep_filter && filters.rep_filter.trim()) {
+        params.append('rep_filter', filters.rep_filter);
+    }
+    if (filters.brick_filter && filters.brick_filter.trim()) {
+        params.append('brick_filter', filters.brick_filter);
+    }
+    if (filters.survey_type_filter && filters.survey_type_filter.trim()) {
+        params.append('survey_type_filter', filters.survey_type_filter);
+    }
+    
+    const url = `/api/dashboard-charts?${params.toString()}`;
+    console.log('Loading performance chart from:', url);
+    
+    try {
+        const response = await fetch(url);
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Performance chart data:', data);
+            updatePerformanceChart(data);
+        } else {
+            console.error('Performance chart error:', response.status);
+        }
+    } catch (error) {
+        console.error('Performance chart loading error:', error);
+    }
+}
+
+async function loadCategoryChart() {
+    const params = new URLSearchParams();
+    params.append('chart_type', 'category_performance');
+    params.append('time_range', filters.time_range.toString());
+    params.append('method', categoryMethod);
+    
+    if (filters.rep_filter && filters.rep_filter.trim()) {
+        params.append('rep_filter', filters.rep_filter);
+    }
+    if (filters.brick_filter && filters.brick_filter.trim()) {
+        params.append('brick_filter', filters.brick_filter);
+    }
+    
+    // *** BU KISIM DÜZELTİLDİ ***
+    // "Tümü" seçildiğinde survey_type_filter parametresini gönderme
+    // Backend'de boş olup olmadığını kontrol ediyor
+    if (filters.survey_type_filter && filters.survey_type_filter.trim()) {
+        params.append('survey_type_filter', filters.survey_type_filter);
+    }
+    // Boş ise backend'de "Tümü" mantığı devreye girer
+    
+    const url = `/api/dashboard-charts?${params.toString()}`;
+    console.log('Loading category chart from:', url);
+    
+    try {
+        const response = await fetch(url);
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Category chart data:', data);
+            updateCategoryChart(data);
+        } else {
+            console.error('Category chart error:', response.status);
+        }
+    } catch (error) {
+        console.error('Category chart loading error:', error);
+    }
+}
+
+async function loadRecentActivities() {
+    const params = new URLSearchParams();
+    params.append('limit', '8');
+    
+    if (filters.survey_type_filter && filters.survey_type_filter.trim()) {
+        params.append('survey_type_filter', filters.survey_type_filter);
+    }
+    
+    const url = `/api/dashboard-recent-activities?${params.toString()}`;
+    console.log('Loading recent activities from:', url);
+    
+    try {
+        const response = await fetch(url);
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Recent activities loaded:', data.length);
+            updateRecentActivities(data);
+        } else {
+            console.error('Recent activities error:', response.status);
+        }
+    } catch (error) {
+        console.error('Recent activities loading error:', error);
+        updateRecentActivities([]); // Empty list on error
+    }
+}
+
+async function loadTopPerformers() {
+    const params = new URLSearchParams();
+    params.append('time_range', filters.time_range.toString());
+    
+    if (filters.rep_filter && filters.rep_filter.trim()) {
+        params.append('rep_filter', filters.rep_filter);
+    }
+    if (filters.brick_filter && filters.brick_filter.trim()) {
+        params.append('brick_filter', filters.brick_filter);
+    }
+    if (filters.survey_type_filter && filters.survey_type_filter.trim()) {
+        params.append('survey_type_filter', filters.survey_type_filter);
+    }
+    
+    const url = `/api/dashboard-top-performers?${params.toString()}`;
+    console.log('Loading top performers from:', url);
+    
+    try {
+        const response = await fetch(url);
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Top performers loaded:', data.length);
+            updateTopPerformers(data);
+        } else {
+            console.error('Top performers error:', response.status);
+        }
+    } catch (error) {
+        console.error('Top performers loading error:', error);
+        updateTopPerformers([]); // Empty list on error
+    }
+}
+
+function updateStats(stats) {
+    console.log('=== UPDATE STATS DEBUG ===');
+    console.log('Raw stats data:', stats);
+    
+    // Ana değerleri güncelle
+    const totalEvals = stats.total_evaluations || 0;
+    const activeReps = stats.active_reps || 0;
+    const activeTargets = stats.active_targets || 0;
+    const avgPerf = stats.avg_performance || 0;
+    
+    console.log('Processed values:', {
+        totalEvals,
+        activeReps,
+        activeTargets,
+        avgPerf
+    });
+    
+    // DOM'u güvenli şekilde güncelle
+    safeSetText(elements.totalEvaluations, totalEvals);
+    safeSetText(elements.activeReps, activeReps);
+    safeSetText(elements.activePharmacies, activeTargets);
+    safeSetText(elements.avgPerformance, `${Math.round(avgPerf)}%`);
+    
+    console.log('Stats display updated successfully');
+}
+
+function updatePerformanceChart(data) {
+    const ctx = document.getElementById('performanceChart');
+    if (!ctx) {
+        console.warn('Performance chart canvas not found');
+        return;
+    }
+    
+    // Önceki chart'ı temizle
+    if (performanceChart) {
+        performanceChart.destroy();
+    }
+    
+    try {
+        performanceChart = new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        min: 0,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    },
+                    x: {
+                        display: true
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 4,
+                        hoverRadius: 6
+                    }
+                }
+            }
+        });
+        
+        console.log('Performance chart updated successfully');
+    } catch (error) {
+        console.error('Performance chart creation error:', error);
+    }
+}
+
+function updateCategoryChart(data) {
+    const ctx = document.getElementById('categoryChart');
+    if (!ctx) {
+        console.warn('Category chart canvas not found');
+        return;
+    }
+    
+    // Önceki chart'ı temizle
+    if (categoryChart) {
+        categoryChart.destroy();
+    }
+    
+    try {
+        categoryChart = new Chart(ctx, {
+            type: 'radar',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        display: false 
+                    }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        min: 0,
+                        max: 100,
+                        ticks: { 
+                            stepSize: 20,
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        },
+                        angleLines: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 4,
+                        hoverRadius: 6
+                    }
+                }
+            }
+        });
+        
+        console.log('Category chart updated successfully');
+    } catch (error) {
+        console.error('Category chart creation error:', error);
+    }
+}
+
+function updateRecentActivities(activities) {
+    if (!elements.recentActivities) {
+        console.warn('Recent activities container not found');
+        return;
+    }
+    
+    if (!activities || !activities.length) {
+        safeSetHTML(elements.recentActivities, 
+            '<p style="color: var(--gray-600); text-align: center; padding: 20px;">Henüz değerlendirme yok</p>');
+        return;
+    }
+    
+    const html = activities.map(activity => `
+        <div class="activity-item">
+            <div>
+                <div class="activity-rep">${escapeHtml(activity.rep_name || 'Bilinmeyen')}</div>
+                <div style="font-size: 12px; color: var(--gray-600);">
+                    ${escapeHtml(activity.date || '')} • ${escapeHtml(activity.target_name || 'N/A')} (${escapeHtml(activity.target_type || 'N/A')})
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="activity-score">${activity.percentage || 0}%</span>
+                <span class="badge badge-${getBadgeClass(activity.percentage || 0)}">${escapeHtml(activity.status || 'N/A')}</span>
+            </div>
+        </div>
+    `).join('');
+    
+    safeSetHTML(elements.recentActivities, html);
+    console.log('Recent activities updated:', activities.length, 'items');
+}
+
+function updateTopPerformers(performers) {
+    if (!elements.topPerformers) {
+        console.warn('Top performers container not found');
+        return;
+    }
+    
+    if (!performers || !performers.length) {
+        safeSetHTML(elements.topPerformers, 
+            '<p style="color: var(--gray-600); text-align: center; padding: 20px;">Veri bulunamadı</p>');
+        return;
+    }
+    
+    const html = performers.map(performer => `
+        <div class="performer-item">
+            <div class="performer-name">
+                ${escapeHtml(performer.rep_name || 'Bilinmeyen')} 
+                <span style="font-size: 11px; color: var(--gray-500);">(${escapeHtml(performer.survey_type || 'eczane')})</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="performer-score">${Math.round(performer.avg_performance || 0)}%</span>
+                <span class="badge badge-${getBadgeClass(performer.avg_performance || 0)}">
+                    ${getStatusText(performer.avg_performance || 0)}
+                </span>
+            </div>
+        </div>
+    `).join('');
+    
+    safeSetHTML(elements.topPerformers, html);
+    console.log('Top performers updated:', performers.length, 'items');
+}
+</script>
+{% endblock %}

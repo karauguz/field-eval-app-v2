@@ -2,7 +2,7 @@
 {% block content %}
 <div class="container mx-auto px-4 py-6">
   <div class="bg-white rounded-2xl shadow" style="padding: 16px 20px;">
-    <h2 class="text-xl font-semibold mb-4">Radar Raporu</h2>
+    <h2 class="text-xl font-semibold mb-4">Radar Raporu - Birleşik Anket Analizi</h2>
 
     <style>
       /* Container ve responsive düzeltmeleri */
@@ -52,6 +52,18 @@
         color: #4b5563; 
         font-size: 0.9rem;
         flex-shrink: 0;
+      }
+      
+      /* Survey Type Info */
+      .survey-type-info {
+        background: linear-gradient(135deg, #11461c, #11461c);
+        color: white;
+        padding: 12px 16px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        text-align: center;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
       }
       
       /* Method Details */
@@ -359,6 +371,11 @@
       }
     </style>
 
+    <!-- Survey Type Bilgi Kutusu -->
+    <div class="survey-type-info">
+      Bu rapor tüm anket türlerini (Eczane + Doktor) birleştirip (5 kategori) gösterir
+    </div>
+
     <!-- Ana kontroller -->
     <div class="grid md:grid-cols-2 gap-4 mb-4">
       <div>
@@ -416,7 +433,7 @@
       <!-- Chart Section - SOL TARAF (3fr) -->
       <div class="chart-section">
         <div class="chart-wrapper">
-          <div class="chart-title" id="chartTitle">Radar Grafiği</div>
+          <div class="chart-title" id="chartTitle">Birleşik Radar Grafiği</div>
           <div class="chart-container">
             <canvas id="radar"></canvas>
           </div>
@@ -431,7 +448,7 @@
             <div class="method-icon">📈</div>
             <div class="method-content">
               <div class="method-name">Mevcut Durum</div>
-              <div class="method-desc">Son 7 anketin ortalaması</div>
+              <div class="method-desc">Son 7 anketin ortalaması (birleşik)</div>
             </div>
             <div class="method-radio">
               <input type="radio" name="method" value="recent" id="method-recent" checked>
@@ -441,7 +458,7 @@
             <div class="method-icon">📊</div>
             <div class="method-content">
               <div class="method-name">Gelişim Trendi</div>
-              <div class="method-desc">İlk vs son karşılaştırma</div>
+              <div class="method-desc">İlk vs son karşılaştırma (birleşik)</div>
             </div>
             <div class="method-radio">
               <input type="radio" name="method" value="trend" id="method-trend">
@@ -451,7 +468,7 @@
             <div class="method-icon">⚖️</div>
             <div class="method-content">
               <div class="method-name">Tarih Ağırlıklı</div>
-              <div class="method-desc">Yeni anketler daha ağır</div>
+              <div class="method-desc">Yeni anketler daha ağır (birleşik)</div>
             </div>
             <div class="method-radio">
               <input type="radio" name="method" value="weighted" id="method-weighted">
@@ -471,7 +488,7 @@
             <div class="method-icon">📋</div>
             <div class="method-content">
               <div class="method-name">Geleneksel</div>
-              <div class="method-desc">Tüm geçmiş anketler</div>
+              <div class="method-desc">Tüm geçmiş anketler (birleşik)</div>
             </div>
             <div class="method-radio">
               <input type="radio" name="method" value="traditional" id="method-traditional">
@@ -489,6 +506,9 @@
 const MAP = {{ mgr_to_reps | tojson }};
 const ORDER = {{ radar_order | tojson }};
 const CURRENT_MANAGER = "{{ current_user }}";
+
+// Doktor kategorilerini kullan (5 kategori) - birleşik sistem için
+const COMBINED_CATEGORIES = ["Müşteri Odaklılık", "Öğrenme Çevikliği", "Sonuç Çevikliği", "Kişisel Farkındalık", "Değişim Çevikliği"];
 
 const selRep = document.getElementById('rep');
 const inpF   = document.getElementById('from');
@@ -515,16 +535,22 @@ function selectedMethod(){
   return r ? r.value : 'recent';
 }
 function getMethodName(method) {
-  const names = { traditional:'Geleneksel', recent:'Mevcut Durum', weighted:'Tarih Ağırlıklı', trend:'Gelişim Trendi', target:'Hedefe Yakınlık' };
+  const names = { 
+    traditional:'Geleneksel', 
+    recent:'Mevcut Durum', 
+    weighted:'Tarih Ağırlıklı', 
+    trend:'Gelişim Trendi', 
+    target:'Hedefe Yakınlık' 
+  };
   return names[method] || method;
 }
 function getMethodDescription(method) {
   const descriptions = {
-    traditional:'Tüm geçmiş anketlerin ağırlıklı ortalaması kullanılır.',
-    recent:'Sadece son 7 anketin ortalaması alınır. Mevcut performansı gösterir.',
-    weighted:'Tüm anketler hesaba katılır, ancak yeni anketler daha ağır sayılır.',
-    trend:'İlk yarı ile son yarı anketler karşılaştırılır. Gelişimi gösterir.',
-    target:'Her kategori için belirlenen hedeflere yakınlık ölçülür.'
+    traditional:'Tüm geçmiş anketlerin (eczane + doktor) ağırlıklı ortalaması kullanılır.',
+    recent:'Sadece son 7 anketin (eczane + doktor) ortalaması alınır. Mevcut performansı gösterir.',
+    weighted:'Tüm anketler (eczane + doktor) hesaba katılır, ancak yeni anketler daha ağır sayılır.',
+    trend:'İlk yarı ile son yarı anketler (eczane + doktor) karşılaştırılır. Gelişimi gösterir.',
+    target:'Her kategori için belirlenen hedeflere yakınlık ölçülür. Tüm anket türleri dahil.'
   };
   return descriptions[method] || '';
 }
@@ -568,7 +594,7 @@ function loadRepresentatives() {
 
 selRep.addEventListener('change', () => {
   meta.textContent = 'Temsilci seçildi.';
-  chartTitle.textContent = selRep.value;
+  chartTitle.textContent = `${selRep.value} - Birleşik Anket Analizi`;
   debounceLoad();
 });
 [inpF, inpT].forEach(el => el.addEventListener('change', debounceLoad));
@@ -599,24 +625,35 @@ function updateMethodSelection(method) {
 
 async function loadData(){
   if (!canLoad() || isLoading) return;
+  
   const rep    = selRep.value;
   const f      = inpF.value;
   const t      = inpT.value;
   const method = selectedMethod();
-  const params = new URLSearchParams({ rep, method });
+  
+  // ÇALIŞAN API ÇAĞRISI - survey_type="doktor" gönder (5 kategori için)
+  // Böylece doktor kategorileri kullanılır ve mevcut API çalışmaya devam eder
+  const params = new URLSearchParams({ rep, method, survey_type: "doktor" });
   if (CURRENT_MANAGER) params.set('manager', CURRENT_MANAGER);
   if (f)   params.set('date_from', f);
   if (t)   params.set('date_to', t);
+  
   setLoading(true);
   meta.textContent = 'Yükleniyor…';
+  
   try{
     const res = await fetch('/api/rep-radar?' + params.toString());
     const js  = await res.json();
-    if (js.error){ meta.textContent = 'Hata: ' + js.error; return; }
+    if (js.error){ 
+      meta.textContent = 'Hata: ' + js.error; 
+      return; 
+    }
+    
     currentData = js;
     updateMetaInfo(js);
     updateMethodDetails(js);
     updateChart(js, rep, method);
+    
   }catch(err){
     console.error('API Error:', err);
     meta.textContent = 'API hatası: ' + (err?.message || err);
@@ -628,7 +665,7 @@ async function loadData(){
 function updateMetaInfo(data) {
   let metaText = '';
   if (data.samples){
-    metaText = `Örnek sayısı: ${data.samples}`;
+    metaText = `Örnek sayısı: ${data.samples} (Birleşik Anketler)`;
     if (data.last_eval_at) metaText += ` • Son kayıt: ${data.last_eval_at.replace('T',' ')}`;
     if (data.method && data.method !== 'traditional'){
       metaText += ` • Yöntem: ${getMethodName(data.method)}`;
@@ -643,6 +680,7 @@ function updateMethodDetails(data){
   const method = data.method || 'traditional';
   document.getElementById('methodTitle').textContent = getMethodName(method);
   document.getElementById('methodDescription').textContent = getMethodDescription(method);
+  
   if (method === 'trend' && data.improvement && !data.insufficient_data){
     document.getElementById('trendInfo').classList.remove('hidden');
     if (data.early_period){
@@ -655,23 +693,26 @@ function updateMethodDetails(data){
     document.getElementById('overallImprovement').textContent = `${avgImprovement.toFixed(1)}%`;
     const maxImprovementIdx = data.improvement.indexOf(Math.max(...data.improvement));
     document.getElementById('bestImproved').textContent =
-      `${(data.labels || ORDER)[maxImprovementIdx]} (+${data.improvement[maxImprovementIdx]}%)`;
+      `${(data.labels || COMBINED_CATEGORIES)[maxImprovementIdx]} (+${data.improvement[maxImprovementIdx]}%)`;
   }
+  
   if (method === 'target' && data.average_achievement){
     document.getElementById('targetInfo').classList.remove('hidden');
     document.getElementById('avgAchievement').textContent = `${data.average_achievement}%`;
     document.getElementById('categoriesAtTarget').textContent =
-      `${data.categories_at_target || 0} / ${(data.labels || ORDER).length}`;
+      `${data.categories_at_target || 0} / ${(data.labels || COMBINED_CATEGORIES).length}`;
   }
+  
   methodDetails.classList.remove('hidden');
 }
 
 function updateChart(data, repName, method){
+  // Birleşik sistem için doktor kategorilerini kullan
   const chartData = {
-    labels: ORDER,
+    labels: data.labels || COMBINED_CATEGORIES,
     datasets: [{
-      label: repName,
-      data: data.data || ORDER.map(()=>0),
+      label: `${repName} (Birleşik)`,
+      data: data.data || COMBINED_CATEGORIES.map(()=>0),
       fill: true,
       backgroundColor: getMethodColor(method, 0.2),
       borderColor: getMethodColor(method, 1),
@@ -702,7 +743,7 @@ function updateChart(data, repName, method){
 
   if (method === 'trend' && data.early_scores && !data.insufficient_data){
     chartData.datasets.push({
-      label: 'İlk Dönem',
+      label: 'İlk Dönem (Birleşik)',
       data: data.early_scores,
       fill: false,
       backgroundColor: 'rgba(156,163,175,0.2)',
@@ -721,7 +762,10 @@ function updateChart(data, repName, method){
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      elements: { line: { tension: 0.2 }, point: { hoverRadius: 8 } },
+      elements: { 
+        line: { tension: 0.2 }, 
+        point: { hoverRadius: 8 } 
+      },
       scales: {
         r: {
           angleLines: { display:true, color:'rgba(0,0,0,0.1)' },
