@@ -1,0 +1,14 @@
+cd C:\Users\gerek\Desktop\test\field-eval-app-v2\app
+
+# Virtual environment oluştur
+python -m venv venv
+
+# Aktive et
+venv\Scripts\activate
+
+# Kütüphaneleri kur
+pip install -r requirements.txt
+
+pip install fastapi uvicorn sqlalchemy pandas python-multipart jinja2 psycopg2-binary
+
+python main.py

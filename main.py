@@ -1288,7 +1288,7 @@ def dashboard_charts(current_user: str = Depends(get_current_user),
                 FROM evaluations e
                 WHERE {where_clause}
                 GROUP BY e.rep_name, COALESCE(e.survey_type, 'eczane')
-                HAVING COUNT(*) >= 2
+                HAVING COUNT(*) >= 1
                 ORDER BY avg_performance DESC
                 LIMIT 15
             """), params).mappings().all()
