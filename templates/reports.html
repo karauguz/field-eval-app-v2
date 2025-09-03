@@ -2,7 +2,9 @@
 {% block content %}
 <div class="container mx-auto px-4 py-6">
   <div class="bg-white rounded-2xl shadow" style="padding: 16px 20px;">
-    <h2 class="text-xl font-semibold mb-4">Radar Raporu - Birleşik Anket Analizi</h2>
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-semibold">Radar Raporu - Birleşik Anket Analizi</h2>
+      </div>
 
     <style>
       /* Container ve responsive düzeltmeleri */
@@ -262,6 +264,318 @@
         height: 16px;
       }
 
+      /* Rapor butonu stilleri */
+      .btn-generate-report {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        background: linear-gradient(135deg, #185C26, #22723b);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(24, 92, 38, 0.3);
+      }
+      
+      .btn-generate-report:hover:not(:disabled) {
+        background: linear-gradient(135deg, #144a20, #185c26);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(24, 92, 38, 0.4);
+      }
+      
+      .btn-generate-report:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      
+      .btn-icon {
+        font-size: 16px;
+      }
+      
+      /* Rapor modal stilleri */
+      .report-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+      }
+      
+      .report-modal.show {
+        opacity: 1;
+        visibility: visible;
+      }
+      
+      .report-content {
+        background: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 1200px;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        transform: translateY(20px);
+        transition: transform 0.3s ease;
+      }
+      
+      .report-modal.show .report-content {
+        transform: translateY(0);
+      }
+      
+      .report-header {
+        background: linear-gradient(135deg, #185C26, #22723b);
+        color: white;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .report-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0;
+      }
+      
+      .report-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        transition: background 0.2s;
+      }
+      
+      .report-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      
+      .report-body {
+        padding: 0;
+        max-height: calc(90vh - 120px);
+        overflow-y: auto;
+      }
+      
+      .report-actions {
+        padding: 16px 20px;
+        background: #f8fafc;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+      
+      .btn-download {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .btn-download:hover {
+        background: linear-gradient(135deg, #1d4ed8, #1e40af);
+        transform: translateY(-1px);
+      }
+      
+      .btn-cancel {
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      
+      .btn-cancel:hover {
+        background: #4b5563;
+      }
+      
+      /* Rapor içerik stilleri */
+      .report-section {
+        padding: 20px;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      
+      .report-section:last-child {
+        border-bottom: none;
+      }
+      
+      .report-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #185C26;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #185C26;
+        display: inline-block;
+      }
+      
+      .stats-grid-report {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      
+      .stat-card-report {
+        background: #f8fafc;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+      }
+      
+      .stat-value-report {
+        font-size: 24px;
+        font-weight: 700;
+        color: #185C26;
+        margin-bottom: 4px;
+      }
+      
+      .stat-label-report {
+        font-size: 12px;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .category-performance {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 16px 0;
+      }
+      
+      .category-chart-container {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid #e5e7eb;
+      }
+      
+      .category-chart-title {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 12px;
+        text-align: center;
+      }
+      
+      .category-radar {
+        width: 100%;
+        height: 250px;
+      }
+      
+      .visits-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+      }
+      
+      .visits-table th {
+        background: #185C26;
+        color: white;
+        padding: 12px 8px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      
+      .visits-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 13px;
+      }
+      
+      .visits-table tr:nth-child(even) {
+        background: #f8fafc;
+      }
+      
+      .performance-badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+      }
+      
+      .badge-excellent {
+        background: #dcfce7;
+        color: #166534;
+      }
+      
+      .badge-good {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      
+      .badge-needs-improvement {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      
+      .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 200px;
+        font-size: 16px;
+        color: #6b7280;
+      }
+      
+      .trend-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      
+      .trend-positive {
+        background: #dcfce7;
+        color: #166534;
+      }
+      
+      .trend-negative {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      
+      .trend-stable {
+        background: #f3f4f6;
+        color: #4b5563;
+      }
+
       /* MOBİL RESPONSIVE */
       @media (max-width: 768px) {
         body {
@@ -438,7 +752,15 @@
             <canvas id="radar"></canvas>
           </div>
         </div>
+<div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+  <button id="generateReportBtn" class="btn-generate-report" disabled>
+    <span class="btn-icon">📊</span>
+    <span class="btn-text">Detaylı Rapor Oluştur</span>
+  </button>
+</div>
+
       </div>
+
 
       <!-- Method Selection - SAĞ TARAF (2fr) -->
       <div class="categories-section">
@@ -501,11 +823,34 @@
   </div>
 </div>
 
+<!-- Rapor Modal -->
+<div id="reportModal" class="report-modal">
+  <div class="report-content">
+    <div class="report-header">
+      <h3 class="report-title" id="reportModalTitle">Detaylı Performans Raporu</h3>
+      <button class="report-close" onclick="closeReportModal()">&times;</button>
+    </div>
+    <div class="report-body" id="reportBody">
+      <div class="loading-spinner">
+        <div>Rapor oluşturuluyor...</div>
+      </div>
+    </div>
+    <div class="report-actions">
+      <button class="btn-cancel" onclick="closeReportModal()">Kapat</button>
+      <button class="btn-download" id="downloadReportBtn" onclick="downloadReport()" disabled>
+        <span>📄</span>
+        PDF İndir
+      </button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const MAP = {{ mgr_to_reps | tojson }};
-const ORDER = {{ radar_order | tojson }};
-const CURRENT_MANAGER = "{{ current_user }}";
+// Jinja değişkenlerini güvenli şekilde parse et
+const MAP = JSON.parse('{{ mgr_to_reps | tojson | safe }}');
+const ORDER = JSON.parse('{{ radar_order | tojson | safe }}');
+const CURRENT_MANAGER = '{{ current_user | safe }}';
 
 // Doktor kategorilerini kullan (5 kategori) - birleşik sistem için
 const COMBINED_CATEGORIES = ["Müşteri Odaklılık", "Öğrenme Çevikliği", "Sonuç Çevikliği", "Kişisel Farkındalık", "Değişim Çevikliği"];
@@ -516,6 +861,7 @@ const inpT   = document.getElementById('to');
 const meta   = document.getElementById('meta');
 const methodDetails = document.getElementById('methodDetails');
 const chartTitle = document.getElementById('chartTitle');
+const generateReportBtn = document.getElementById('generateReportBtn');
 
 const methodCards  = document.querySelectorAll('.method-card');
 const methodRadios = document.querySelectorAll('input[name="method"]');
@@ -523,6 +869,10 @@ const methodRadios = document.querySelectorAll('input[name="method"]');
 let chart, currentData = null;
 let isLoading = false;
 let debTimer  = null;
+let currentReportData = null;
+
+// Rapor değişkenleri
+let isGeneratingReport = false;
 
 function canLoad(){ return !!selRep.value; }
 function setLoading(state){
@@ -534,6 +884,332 @@ function selectedMethod(){
   const r = document.querySelector('input[name="method"]:checked');
   return r ? r.value : 'recent';
 }
+
+function updateReportButton() {
+  const hasRep = !!selRep.value;
+  generateReportBtn.disabled = !hasRep || isGeneratingReport;
+  
+  if (isGeneratingReport) {
+    generateReportBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-text">Rapor Oluşturuluyor...</span>';
+  } else if (hasRep) {
+    generateReportBtn.innerHTML = '<span class="btn-icon">📊</span><span class="btn-text">Detaylı Rapor Oluştur</span>';
+  } else {
+    generateReportBtn.innerHTML = '<span class="btn-icon">📊</span><span class="btn-text">Temsilci Seçin</span>';
+  }
+}
+
+// Rapor modal fonksiyonları
+function showReportModal() {
+  const modal = document.getElementById('reportModal');
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeReportModal() {
+  const modal = document.getElementById('reportModal');
+  modal.classList.remove('show');
+  document.body.style.overflow = 'auto';
+  
+  // İndirme butonunu sıfırla
+  const downloadBtn = document.getElementById('downloadReportBtn');
+  downloadBtn.disabled = true;
+  currentReportData = null;
+}
+
+// Rapor oluşturma fonksiyonu
+async function generateReport() {
+  if (!selRep.value || isGeneratingReport) return;
+  
+  isGeneratingReport = true;
+  updateReportButton();
+  showReportModal();
+  
+  const reportBody = document.getElementById('reportBody');
+  const reportTitle = document.getElementById('reportModalTitle');
+  const downloadBtn = document.getElementById('downloadReportBtn');
+  
+  reportTitle.textContent = `${selRep.value} - Detaylı Performans Raporu`;
+  reportBody.innerHTML = '<div class="loading-spinner"><div>Rapor oluşturuluyor...</div></div>';
+  downloadBtn.disabled = true;
+  
+  const params = new URLSearchParams({
+    rep: selRep.value,
+    date_from: inpF.value || '',
+    date_to: inpT.value || '',
+    survey_type: '' // Tüm anket türlerini dahil et
+  });
+  
+  try {
+    const response = await fetch(`/api/generate-report?${params.toString()}`);
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    
+    currentReportData = data;
+    renderReport(data);
+    downloadBtn.disabled = false;
+    
+  } catch (error) {
+    console.error('Rapor oluşturma hatası:', error);
+    reportBody.innerHTML = `
+      <div class="report-section">
+        <div class="text-center text-red-600">
+          <h3>Rapor oluşturulamadı</h3>
+          <p>${error.message || 'Bilinmeyen hata'}</p>
+        </div>
+      </div>`;
+  } finally {
+    isGeneratingReport = false;
+    updateReportButton();
+  }
+}
+
+function renderReport(data) {
+  const reportBody = document.getElementById('reportBody');
+  
+  let html = `
+    <!-- Rapor Bilgileri -->
+    <div class="report-section">
+      <div class="report-section-title">Rapor Bilgileri</div>
+      <div class="stats-grid-report">
+        <div class="stat-card-report">
+          <div class="stat-value-report">${data.rep_name}</div>
+          <div class="stat-label-report">Temsilci</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">${data.date_range.from} - ${data.date_range.to}</div>
+          <div class="stat-label-report">Tarih Aralığı</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">${data.generated_at}</div>
+          <div class="stat-label-report">Oluşturma Tarihi</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Temel İstatistikler -->
+    <div class="report-section">
+      <div class="report-section-title">Genel Performans Özeti</div>
+      <div class="stats-grid-report">
+        <div class="stat-card-report">
+          <div class="stat-value-report">${data.basic_stats.total_evaluations || 0}</div>
+          <div class="stat-label-report">Toplam Değerlendirme</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">${(data.basic_stats.avg_performance || 0).toFixed(1)}%</div>
+          <div class="stat-label-report">Ortalama Performans</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">${(data.basic_stats.max_performance || 0).toFixed(1)}%</div>
+          <div class="stat-label-report">En Yüksek Performans</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">${(data.basic_stats.min_performance || 0).toFixed(1)}%</div>
+          <div class="stat-label-report">En Düşük Performans</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">${data.basic_stats.unique_visits || 0}</div>
+          <div class="stat-label-report">Benzersiz Ziyaret</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Trend analizi
+  if (data.trend_analysis) {
+    const trend = data.trend_analysis;
+    const trendClass = trend.trend === 'pozitif' ? 'trend-positive' : trend.trend === 'negatif' ? 'trend-negative' : 'trend-stable';
+    const trendIcon = trend.trend === 'pozitif' ? '📈' : trend.trend === 'negatif' ? '📉' : '📊';
+    
+    html += `
+    <div class="report-section">
+      <div class="report-section-title">Gelişim Analizi</div>
+      <div class="stats-grid-report">
+        <div class="stat-card-report">
+          <div class="stat-value-report">${trend.first_half_avg}%</div>
+          <div class="stat-label-report">İlk Yarı Ortalama</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">${trend.second_half_avg}%</div>
+          <div class="stat-label-report">Son Yarı Ortalama</div>
+        </div>
+        <div class="stat-card-report">
+          <div class="stat-value-report">
+            ${trend.improvement > 0 ? '+' : ''}${trend.improvement}%
+            <br>
+            <span class="trend-indicator ${trendClass}">
+              ${trendIcon} ${trend.trend}
+            </span>
+          </div>
+          <div class="stat-label-report">Gelişim</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Kategori performansı
+  if (data.category_performance && Object.keys(data.category_performance).length > 0) {
+    html += `<div class="report-section">
+      <div class="report-section-title">Kategori Performansları</div>
+      <div class="category-performance">`;
+    
+    for (const [surveyType, categories] of Object.entries(data.category_performance)) {
+      const surveyName = surveyType === 'eczane' ? 'Eczane Anketleri' : 'Doktor Anketleri';
+      html += `
+        <div class="category-chart-container">
+          <div class="category-chart-title">${surveyName}</div>
+          <canvas class="category-radar" id="categoryChart_${surveyType}"></canvas>
+        </div>`;
+    }
+    
+    html += `</div></div>`;
+  }
+
+  // Son ziyaretler
+  if (data.recent_visits && data.recent_visits.length > 0) {
+    html += `
+    <div class="report-section">
+      <div class="report-section-title">Son Ziyaretler</div>
+      <table class="visits-table">
+        <thead>
+          <tr>
+            <th>Tarih</th>
+            <th>Hedef</th>
+            <th>Tür</th>
+            <th>Brick</th>
+            <th>Performans</th>
+            <th>Durum</th>
+          </tr>
+        </thead>
+        <tbody>`;
+    
+    data.recent_visits.forEach(visit => {
+      const target = visit.survey_type === 'eczane' ? visit.pharmacy_name : visit.doctor_name;
+      const badgeClass = visit.percentage >= 90 ? 'badge-excellent' : visit.percentage >= 70 ? 'badge-good' : 'badge-needs-improvement';
+      const status = visit.percentage >= 90 ? 'Mükemmel' : visit.percentage >= 70 ? 'İyi' : 'Gelişmeli';
+      
+      html += `
+        <tr>
+          <td>${visit.created_at.substring(0, 10)}</td>
+          <td>${target || '-'}</td>
+          <td>${visit.survey_type === 'eczane' ? 'Eczane' : 'Doktor'}</td>
+          <td>${visit.brick_name || '-'}</td>
+          <td>${visit.percentage.toFixed(0)}%</td>
+          <td><span class="performance-badge ${badgeClass}">${status}</span></td>
+        </tr>`;
+    });
+    
+    html += `</tbody></table></div>`;
+  }
+
+  reportBody.innerHTML = html;
+  
+  // Kategori radarlarını çiz
+  setTimeout(() => {
+    if (data.category_performance) {
+      for (const [surveyType, categories] of Object.entries(data.category_performance)) {
+        drawCategoryRadar(surveyType, categories);
+      }
+    }
+  }, 100);
+}
+
+function drawCategoryRadar(surveyType, categories) {
+  const canvas = document.getElementById(`categoryChart_${surveyType}`);
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  
+  new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: categories.map(cat => cat.category),
+      datasets: [{
+        label: 'Performans (%)',
+        data: categories.map(cat => cat.score),
+        fill: true,
+        backgroundColor: 'rgba(24, 92, 38, 0.2)',
+        borderColor: 'rgba(24, 92, 38, 1)',
+        pointBackgroundColor: 'rgba(24, 92, 38, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(24, 92, 38, 1)',
+        borderWidth: 2,
+        pointRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          angleLines: { display: true },
+          suggestedMin: 0,
+          suggestedMax: 100,
+          ticks: { stepSize: 20 }
+        }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+}
+
+async function downloadReport() {
+  if (!currentReportData || !selRep.value) return;
+  
+  const downloadBtn = document.getElementById('downloadReportBtn');
+  const originalContent = downloadBtn.innerHTML;
+  
+  downloadBtn.innerHTML = '<span>⏳</span> İndiriliyor...';
+  downloadBtn.disabled = true;
+  
+  try {
+    const params = new URLSearchParams({
+      rep: selRep.value,
+      date_from: inpF.value || '',
+      date_to: inpT.value || '',
+      survey_type: ''
+    });
+    
+    const response = await fetch(`/api/download-report?${params.toString()}`);
+    
+    if (!response.ok) {
+      throw new Error('İndirme hatası');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `${selRep.value}_rapor_${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+  } catch (error) {
+    console.error('İndirme hatası:', error);
+    alert('Rapor indirilemedi. Lütfen tekrar deneyin.');
+  } finally {
+    downloadBtn.innerHTML = originalContent;
+    downloadBtn.disabled = false;
+  }
+}
+
+// Event listeners
+generateReportBtn.addEventListener('click', () => {
+  if (!selRep.value) return;
+  // Otomatik olarak detaylı rapora git
+  const repName = encodeURIComponent(selRep.value);
+  window.location.href = `detayli-rapor?rep=${repName}`;
+});
+
+
+// Mevcut kod devam ediyor...
 function getMethodName(method) {
   const names = { 
     traditional:'Geleneksel', 
@@ -544,6 +1220,7 @@ function getMethodName(method) {
   };
   return names[method] || method;
 }
+
 function getMethodDescription(method) {
   const descriptions = {
     traditional:'Tüm geçmiş anketlerin (eczane + doktor) ağırlıklı ortalaması kullanılır.',
@@ -554,6 +1231,7 @@ function getMethodDescription(method) {
   };
   return descriptions[method] || '';
 }
+
 function getMethodColor(method, alpha){
   const colors = {
     traditional:`rgba(75,85,99,${alpha})`,
@@ -595,18 +1273,22 @@ function loadRepresentatives() {
 selRep.addEventListener('change', () => {
   meta.textContent = 'Temsilci seçildi.';
   chartTitle.textContent = `${selRep.value} - Birleşik Anket Analizi`;
+  updateReportButton();
   debounceLoad();
 });
+
 [inpF, inpT].forEach(el => el.addEventListener('change', debounceLoad));
 
 methodCards.forEach(card => {
   card.addEventListener('click', () => {
-    const method = card.dataset.method;
-    document.getElementById(`method-${method}`).checked = true;
-    updateMethodSelection(method);
-    if (canLoad()) debounceLoad();
+    methodCards.forEach(c => c.classList.remove('method-selected'));
+    card.classList.add('method-selected');
+    document.getElementById(`method-${card.dataset.method}`).checked = true;
+    // Burada method değişikliğine göre grafiği yeniden çizme fonksiyonunu çağır
+    debounceLoad();
   });
 });
+
 methodRadios.forEach(radio => {
   radio.addEventListener('change', (e) => {
     updateMethodSelection(e.target.value);
@@ -631,8 +1313,6 @@ async function loadData(){
   const t      = inpT.value;
   const method = selectedMethod();
   
-  // ÇALIŞAN API ÇAĞRISI - survey_type="doktor" gönder (5 kategori için)
-  // Böylece doktor kategorileri kullanılır ve mevcut API çalışmaya devam eder
   const params = new URLSearchParams({ rep, method, survey_type: "doktor" });
   if (CURRENT_MANAGER) params.set('manager', CURRENT_MANAGER);
   if (f)   params.set('date_from', f);
@@ -707,7 +1387,6 @@ function updateMethodDetails(data){
 }
 
 function updateChart(data, repName, method){
-  // Birleşik sistem için doktor kategorilerini kullan
   const chartData = {
     labels: data.labels || COMBINED_CATEGORIES,
     datasets: [{
@@ -822,6 +1501,395 @@ function updateChart(data, repName, method){
   chart = new Chart(ctx, config);
 }
 
+// Modal dışında tıklanınca kapat
+document.addEventListener('click', function(event) {
+  const modal = document.getElementById('reportModal');
+  const reportContent = document.querySelector('.report-content');
+  
+  if (modal.classList.contains('show') && !reportContent.contains(event.target)) {
+    closeReportModal();
+  }
+});
+
+// ESC tuşu ile modal'ı kapat
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') {
+    const modal = document.getElementById('reportModal');
+    if (modal.classList.contains('show')) {
+      closeReportModal();
+    }
+  }
+});
+
 updateMethodSelection('recent');
+updateReportButton();
 </script>
+
+<!-- Ana CSS stilleri eklenecek - originalinizden kopyalayın -->
+<style>
+/* Container ve responsive düzeltmeleri */
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.date-input { 
+  position: relative; 
+  width: 100%;
+}
+.date-input input[type="date"]{
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  padding-right: 40px;
+  border: 1px solid #e5e7eb; 
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.date-input input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+.date-input input[type="date"]::-webkit-calendar-picker-indicator{
+  opacity: .75; 
+  cursor: pointer;
+}
+
+.controls { 
+  display: flex; 
+  gap: 12px; 
+  flex-wrap: wrap; 
+  margin-bottom: 1rem; 
+  align-items: center; 
+  width: 100%;
+}
+.controls .meta { 
+  margin-left: auto; 
+  color: #4b5563; 
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+/* Survey Type Info */
+.survey-type-info {
+  background: linear-gradient(135deg, #11461c, #11461c);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  text-align: center;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Method Details */
+#methodDetails {
+  background: rgba(3,47,12,0.05) !important;
+  border: 1px solid rgba(3,47,12,0.2) !important;
+  margin-bottom: 16px;
+}
+
+/* RESPONSIVE GRID LAYOUT */
+.main-content-grid {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+  margin: 20px 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Desktop: Radar 3fr, Method 2fr */
+@media (min-width: 1200px) {
+  .main-content-grid {
+    grid-template-columns: 3fr 2fr;
+    gap: 32px;
+  }
+}
+
+/* Tablet: tek sütun, method üstte */
+@media (max-width: 1199px) {
+  .main-content-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .categories-section {
+    order: 1;
+  }
+  
+  .chart-section {
+    order: 2;
+  }
+}
+
+/* Chart section - RESPONSIVE (SOL TARAF - 3FR) */
+.chart-section {
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 16px;
+  border: 3px solid #032f0c;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.chart-wrapper {
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.chart-title {
+  text-align: center;
+  font-weight: 700;
+  font-size: 18px;
+  color: #032f0c;
+  margin-bottom: 16px;
+}
+
+/* RADAR CANVAS - RESPONSIVE */
+#radar {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  max-width: 100%;
+}
+
+/* Categories section - RESPONSIVE (SAĞ TARAF - 2FR) */
+.categories-section {
+  background: #f9fafb;
+  padding: 20px;
+  border-radius: 16px;
+  border: 2px solid #e5e7eb;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.categories-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+/* Method cards - RESPONSIVE GRID */
+.method-cards-vertical {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+/* Desktop: tek sütun */
+@media (min-width: 1200px) {
+  .method-cards-vertical {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tablet: 2 sütun */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .method-cards-vertical {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .chart-container {
+    height: 350px;
+  }
+}
+
+/* Mobil: tek sütun */
+@media (max-width: 767px) {
+  .method-cards-vertical {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-container {
+    height: 300px;
+  }
+}
+
+.method-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.method-card:hover {
+  border-color: #032f0c;
+  box-shadow: 0 2px 8px rgba(3,47,12,0.1);
+}
+
+.method-card.method-selected{
+  border: 2px solid #032f0c;
+  box-shadow: 0 2px 10px rgba(3,47,12,0.15);
+  background: rgba(3,47,12,0.05);
+}
+
+.method-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.method-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.method-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1f2937;
+  margin-bottom: 2px;
+}
+
+.method-desc {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
+.method-radio {
+  flex-shrink: 0;
+}
+
+.method-radio input[type="radio"] {
+  width: 16px;
+  height: 16px;
+}
+
+/* MOBİL RESPONSIVE */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+  
+  .controls {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .controls .meta {
+    margin-left: 0;
+    text-align: center;
+    margin-top: 8px;
+  }
+  
+  .method-card {
+    flex-direction: row;
+    padding: 12px;
+    gap: 10px;
+  }
+  
+  .method-name {
+    font-size: 14px;
+  }
+  
+  .method-desc {
+    font-size: 12px;
+  }
+  
+  .chart-title {
+    font-size: 16px;
+  }
+  
+  .categories-title {
+    font-size: 16px;
+  }
+  
+  .date-input input[type="date"] {
+    font-size: 13px;
+    padding: 6px 10px;
+    padding-right: 35px;
+    min-height: 42px;
+  }
+  
+  .date-input label {
+    font-size: 13px;
+  }
+}
+
+/* ULTRA KÜÇÜK EKRANLAR */
+@media (max-width: 480px) {
+  .chart-container {
+    height: 280px;
+  }
+  
+  .method-card {
+    padding: 10px;
+    gap: 8px;
+  }
+  
+  .method-icon {
+    font-size: 18px;
+  }
+  
+  .method-name {
+    font-size: 13px;
+  }
+  
+  .method-desc {
+    font-size: 11px;
+  }
+}
+
+/* Grid sistem düzeltmeleri */
+.grid {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+}
+
+.gap-4 {
+  gap: 1rem;
+}
+
+.gap-3 {
+  gap: 0.75rem;
+}
+
+.grid-cols-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (min-width: 768px) {
+  .md\\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Input ve select responsive */
+select, input[type="date"] {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+</style>
 {% endblock %}

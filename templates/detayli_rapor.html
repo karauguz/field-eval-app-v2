@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="report-container">
+    <div class="report-header">
+        <h1>Detaylı Rapor - {{ rep_name }}</h1>
+        <p>Tarih Aralığı: {{ date_range.from }} - {{ date_range.to }}</p>
+        <p>Oluşturulma: {{ generated_at }}</p>
+    </div>
+
+    <div class="report-actions">
+        <button onclick="downloadReport('pdf')">📄 PDF İndir</button>
+        <button onclick="downloadReport('excel')">📊 Excel İndir</button>
+    </div>
+
+    <div class="report-section">
+        <h2>Temel İstatistikler</h2>
+        <table class="table-report">
+            <tr><th>Toplam Değerlendirme</th><td>{{ basic_stats.total_evaluations }}</td></tr>
+            <tr><th>Ortalama Performans</th><td>{{ basic_stats.avg_performance }}%</td></tr>
+            <tr><th>En Yüksek</th><td>{{ basic_stats.max_performance }}%</td></tr>
+            <tr><th>En Düşük</th><td>{{ basic_stats.min_performance }}%</td></tr>
+            <tr><th>Benzersiz Ziyaret</th><td>{{ basic_stats.unique_visits }}</td></tr>
+        </table>
+    </div>
+
+    {% if trend_analysis %}
+    <div class="report-section">
+        <h2>Trend Analizi</h2>
+        <p>İlk Yarı Ortalama: {{ trend_analysis.first_half_avg }}%</p>
+        <p>İkinci Yarı Ortalama: {{ trend_analysis.second_half_avg }}%</p>
+        <p>Gelişim: {{ trend_analysis.improvement }}%</p>
+        <p>Trend: {{ trend_analysis.trend }}</p>
+    </div>
+    {% endif %}
+
+    {% if category_performance %}
+    <div class="report-section">
+        <h2>Kategori Performansları</h2>
+        {% for survey_type, cats in category_performance.items() %}
+            <h3>{{ survey_type|capitalize }}</h3>
+            <table class="table-report">
+                <tr><th>Kategori</th><th>Puan</th></tr>
+                {% for cat in cats %}
+                <tr><td>{{ cat.category }}</td><td>{{ cat.score }}%</td></tr>
+                {% endfor %}
+            </table>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="report-section">
+        <h2>Son Ziyaretler</h2>
+        <table class="table-report">
+            <tr>
+                <th>Tarih</th>
+                <th>Eczane</th>
+                <th>Doktor</th>
+                <th>Bölge</th>
+                <th>Anket Tipi</th>
+                <th>Puan</th>
+            </tr>
+            {% for visit in recent_visits %}
+            <tr>
+                <td>{{ visit.created_at }}</td>
+                <td>{{ visit.pharmacy_name or "-" }}</td>
+                <td>{{ visit.doctor_name or "-" }}</td>
+                <td>{{ visit.brick_name or "-" }}</td>
+                <td>{{ visit.survey_type }}</td>
+                <td>{{ visit.percentage }}%</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<script>
+function downloadReport(format) {
+    const rep = "{{ rep_name }}";
+    const from = "{{ date_range.from }}";
+    const to = "{{ date_range.to }}";
+    window.location.href = `/api/download-report?rep=${encodeURIComponent(rep)}&date_from=${from}&date_to=${to}&format=${format}`;
+}
+</script>
+
+<style>
+.report-container {
+    max-width: 1000px;
+    margin: auto;
+    padding: 20px;
+}
+.report-header {
+    border-bottom: 2px solid #eee;
+    margin-bottom: 20px;
+}
+.report-actions {
+    margin: 15px 0;
+}
+.report-actions button {
+    margin-right: 10px;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background: #2f855a;
+    color: white;
+}
+.table-report {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+.table-report th, .table-report td {
+    border: 1px solid #ccc;
+    padding: 6px 10px;
+    text-align: left;
+}
+.table-report th {
+    background: #f7f7f7;
+}
+</style>
+{% endblock %}

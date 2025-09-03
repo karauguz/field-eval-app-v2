@@ -3,19 +3,27 @@
 <div class="card" style="padding:24px">
   <a href="/evaluations" class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px">← Geri</a>
   <h2 class="h-title" style="margin-bottom:12px">Değerlendirme Detayı</h2>
-
   <!-- Üst bilgiler -->
   <div class="grid md:grid-cols-3 gap-4" style="margin-bottom:14px">
     <div class="stat"><div class="muted">Tarih</div><div class="v">{{ eval.created_at[:19].replace('T',' ') }}</div></div>
     <div class="stat"><div class="muted">Müdür</div><div class="v">{{ eval.manager_name }}</div></div>
     <div class="stat"><div class="muted">Çalışan</div><div class="v">{{ eval.rep_name }}</div></div>
   </div>
-  <div class="grid md:grid-cols-3 gap-4" style="margin-bottom:18px">
+  <div class="grid md:grid-cols-4 gap-4" style="margin-bottom:18px">
     <div class="stat"><div class="muted">Bölge</div><div class="v">{{ eval.region_name or "-" }}</div></div>
     <div class="stat"><div class="muted">Brick</div><div class="v">{{ eval.brick_name or "-" }}</div></div>
-    <div class="stat"><div class="muted">Eczane</div><div class="v">{{ eval.pharmacy_name or "-" }}</div></div>
+    <div class="stat"><div class="muted">Anket Türü</div><div class="v">{{ "Doktor Ziyareti" if eval.survey_type == "doktor" else "Eczane Ziyareti" }}</div></div>
+    <div class="stat">
+      <div class="muted">Ziyaret Edilen</div>
+      <div class="v">
+        {% if eval.survey_type == "doktor" %}
+          {{ eval.doctor_name or "-" }}
+        {% else %}
+          {{ eval.pharmacy_name or "-" }}
+        {% endif %}
+      </div>
+    </div>
   </div>
-
   <!-- KPI kutuları -->
   <div class="grid md:grid-cols-3 gap-4" style="margin-bottom:8px">
     <div class="kpi">
@@ -31,14 +39,12 @@
       <div><b>{{ '%.0f'|format(eval.percentage) }}%</b></div>
     </div>
   </div>
-
   <!-- Teknik detayı aç/kapat -->
   <div style="display:flex;justify-content:flex-end;margin:6px 0 14px">
     <label class="muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
       <input id="toggleTech" type="checkbox"> Teknik detayı göster
     </label>
   </div>
-
   <!-- Cevaplar -->
   <div class="space-y-3">
     {% for a in answers %}
@@ -54,7 +60,6 @@
     {% endfor %}
   </div>
 </div>
-
 <!-- Sayfaya özel küçük stiller -->
 <style>
 .stat{background:#f8fafb;border:1px solid var(--border);border-radius:12px;padding:12px}
@@ -71,7 +76,6 @@
 .badge.no{background:#dc2626;color:#fff}
 .tech{display:none;margin-top:6px}
 </style>
-
 <script>
   // teknik detay toggle
   document.addEventListener('DOMContentLoaded', () => {

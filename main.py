@@ -8,14 +8,19 @@ import unicodedata
 import urllib.parse
 import hashlib
 import random
+import tempfile
+import json
 
 import pandas as pd
 from fastapi import FastAPI, Request, Form, HTTPException, Depends, Cookie
-from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
+from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+
+# PDF kütüphanesi
+from reportlab.pdfgen import canvas
 
 # --------------------------- Paths / App ---------------------------
 BASE_DIR = Path(__file__).parent.resolve()
@@ -1924,6 +1929,231 @@ def dashboard_page(request: Request, current_user: str = Depends(get_current_use
         "is_super_user": auth_manager.is_super_user(current_user),
         "survey_types": SURVEY_TYPES
     })
+
+@app.get("/detayli-rapor", response_class=HTMLResponse)
+async def detayli_rapor(rep: str,
+                        date_from: Optional[str] = None,
+                        date_to: Optional[str] = None,
+                        survey_type: Optional[str] = None,
+                        current_user: str = Depends(get_current_user),
+                        request: Request = None):
+    """Detaylı rapor ekranı (HTML)"""
+
+    report_data = api_generate_report(
+        rep=rep,
+        date_from=date_from,
+        date_to=date_to,
+        survey_type=survey_type,
+        current_user=current_user
+    )
+
+    if isinstance(report_data, JSONResponse):
+        import json
+        report_dict = json.loads(report_data.body.decode())
+    else:
+        raise HTTPException(status_code=500, detail="Rapor alınamadı")
+
+    return templates.TemplateResponse("detayli_rapor.html", {
+        "request": request,
+        **report_dict
+    })
+
+
+@app.get("/api/generate-report")
+def api_generate_report(rep: str, 
+                       date_from: Optional[str] = None,
+                       date_to: Optional[str] = None,
+                       survey_type: Optional[str] = None,
+                       current_user: str = Depends(get_current_user)):
+    """Detaylı rapor verisi oluştur - Düzeltilmiş veritabanı bağlantı yönetimi"""
+    if not rep:
+        return JSONResponse({"error": "Temsilci gerekli"}, status_code=400)
+    
+    d1, d2, span_days = _daterange_defaults(date_from, date_to)
+    
+    where_conditions = ["e.rep_name = :rep", f"{sql_date_cast('e.created_at')} BETWEEN :d1 AND :d2"]
+    params = {"rep": rep, "d1": d1, "d2": d2}
+    
+    if not auth_manager.is_super_user(current_user):
+        where_conditions.append("e.manager_name = :current_user")
+        params["current_user"] = current_user
+    
+    # Survey type filtresi - boş ise tümü
+    if survey_type and survey_type.strip() and survey_type in SURVEY_TYPES:
+        where_conditions.append("COALESCE(e.survey_type, 'eczane') = :survey_type")
+        params["survey_type"] = survey_type
+    
+    where_clause = " AND ".join(where_conditions)
+    
+    try:
+        # HER SORGU İÇİN AYRI CONNECTION KULLAN
+        
+        # 1. Temel istatistikler
+        with engine.begin() as conn1:
+            basic_stats = conn1.execute(text(f"""
+                SELECT 
+                    COUNT(*) as total_evaluations,
+                    AVG(e.percentage) as avg_performance,
+                    MAX(e.percentage) as max_performance,
+                    MIN(e.percentage) as min_performance,
+                    COUNT(DISTINCT CASE WHEN COALESCE(e.survey_type, 'eczane') = 'eczane' 
+                          THEN e.pharmacy_name ELSE e.doctor_name END) as unique_visits
+                FROM evaluations e
+                WHERE {where_clause}
+            """), params).mappings().first()
+        
+        # 2. Son ziyaretler
+        with engine.begin() as conn2:
+            recent_visits = conn2.execute(text(f"""
+                SELECT e.created_at, e.pharmacy_name, e.doctor_name, e.brick_name,
+                       COALESCE(e.survey_type, 'eczane') as survey_type, e.percentage
+                FROM evaluations e
+                WHERE {where_clause}
+                ORDER BY e.created_at DESC
+                LIMIT 20
+            """), params).mappings().all()
+        
+        # 3. Trend analizi için tüm değerlendirmeler
+        with engine.begin() as conn3:
+            all_evals = conn3.execute(text(f"""
+                SELECT e.created_at, e.percentage
+                FROM evaluations e
+                WHERE {where_clause}
+                ORDER BY e.created_at
+            """), params).mappings().all()
+        
+        # Trend analizi hesaplama
+        trend_analysis = None
+        if len(all_evals) >= 4:
+            mid = len(all_evals) // 2
+            first_half = all_evals[:mid]
+            second_half = all_evals[mid:]
+            
+            first_avg = sum(e["percentage"] for e in first_half) / len(first_half)
+            second_avg = sum(e["percentage"] for e in second_half) / len(second_half)
+            improvement = second_avg - first_avg
+            
+            trend_analysis = {
+                "first_half_avg": round(first_avg, 1),
+                "second_half_avg": round(second_avg, 1),
+                "improvement": round(improvement, 1),
+                "trend": "pozitif" if improvement > 2 else "negatif" if improvement < -2 else "sabit"
+            }
+        
+        # 4. Kategori performansları
+        category_performance = {}
+        for st in ["eczane", "doktor"]:
+            where_with_type = where_clause + f" AND COALESCE(e.survey_type, 'eczane') = '{st}'"
+            
+            with engine.begin() as conn4:
+                cat_data = conn4.execute(text(f"""
+                    SELECT q.category, AVG(CASE WHEN a.answer = 1 THEN 100.0 ELSE 0.0 END) as avg_score
+                    FROM answers a
+                    JOIN evaluations e ON e.id = a.evaluation_id
+                    JOIN questions q ON q.id = a.question_id
+                    WHERE {where_with_type}
+                    GROUP BY q.category
+                    HAVING COUNT(*) > 0
+                """), params).mappings().all()
+            
+            if cat_data:
+                categories = []
+                for cat in get_survey_categories(st):
+                    score = 0
+                    for row in cat_data:
+                        if row["category"] and cat.lower() in row["category"].lower():
+                            score = row["avg_score"] or 0
+                            break
+                    categories.append({"category": cat, "score": round(score, 1)})
+                
+                if any(c["score"] > 0 for c in categories):
+                    category_performance[st] = categories
+        
+        return JSONResponse({
+            "rep_name": rep,
+            "date_range": {"from": d1, "to": d2},
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "basic_stats": {
+                "total_evaluations": int(basic_stats["total_evaluations"] or 0),
+                "avg_performance": round(basic_stats["avg_performance"] or 0, 1),
+                "max_performance": round(basic_stats["max_performance"] or 0, 1),
+                "min_performance": round(basic_stats["min_performance"] or 0, 1),
+                "unique_visits": int(basic_stats["unique_visits"] or 0)
+            },
+            "trend_analysis": trend_analysis,
+            "category_performance": category_performance,
+            "recent_visits": [dict(visit) for visit in recent_visits]
+        })
+        
+    except Exception as e:
+        print(f"Rapor oluşturma hatası: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return JSONResponse({"error": f"Rapor oluşturulamadı: {str(e)}"}, status_code=500)
+
+from fastapi.responses import FileResponse
+import pandas as pd
+from reportlab.pdfgen import canvas
+import tempfile
+import os
+
+@app.get("/api/download-report")
+async def api_download_report(rep: str,
+                              date_from: Optional[str] = None,
+                              date_to: Optional[str] = None,
+                              survey_type: Optional[str] = None,
+                              format: str = "pdf",
+                              current_user: str = Depends(get_current_user)):
+    """Rapor indir - PDF veya Excel"""
+
+    # Önce JSON verisini alalım
+    report_data = api_generate_report(
+        rep=rep,
+        date_from=date_from,
+        date_to=date_to,
+        survey_type=survey_type,
+        current_user=current_user
+    )
+
+    if isinstance(report_data, JSONResponse):
+        report_dict = report_data.body.decode()
+        import json
+        report_dict = json.loads(report_dict)
+    else:
+        return JSONResponse({"error": "Rapor alınamadı"}, status_code=500)
+
+    # Geçici dosya üretelim
+    tmpfile = tempfile.NamedTemporaryFile(delete=False)
+
+    if format == "excel":
+        df = pd.DataFrame(report_dict["recent_visits"])
+        excel_path = tmpfile.name + ".xlsx"
+        df.to_excel(excel_path, index=False)
+        return FileResponse(
+            excel_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=f"{rep}_rapor.xlsx"
+        )
+
+    elif format == "pdf":
+        pdf_path = tmpfile.name + ".pdf"
+        c = canvas.Canvas(pdf_path)
+        c.setFont("Helvetica", 12)
+        c.drawString(50, 800, f"Performans Raporu - {rep}")
+        c.drawString(50, 780, f"Tarih Aralığı: {date_from} - {date_to}")
+        c.drawString(50, 760, f"Toplam Değerlendirme: {report_dict['basic_stats']['total_evaluations']}")
+        c.drawString(50, 740, f"Ortalama Performans: {report_dict['basic_stats']['avg_performance']}")
+        c.save()
+
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            filename=f"{rep}_rapor.pdf"
+        )
+
+    else:
+        return JSONResponse({"error": "Geçersiz format seçildi (pdf/excel)"}, status_code=400)
+    
 
 # --------------------------- FORM SUBMISSION ---------------------------
 
